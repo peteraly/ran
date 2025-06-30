@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import SourcePanel from './SourcePanel';
 import sourceRegistry from '../data/source_registry.json';
-import { retrieveRelevantContent, processRagQuery } from '../services/connections';
+import { retrieveRelevantContent, processRagQuery, processUploadedFiles } from '../services/connections';
 
 function groupSourcesByType(sources) {
   return sources.reduce((acc, src) => {
@@ -32,6 +32,7 @@ export default function PromptDashboardApp({ onClose }) {
   const [showCommandBar, setShowCommandBar] = useState(false);
   const [selectedDeliverableType, setSelectedDeliverableType] = useState(null);
   const commandBarRef = useRef(null);
+  const [localFiles, setLocalFiles] = useState([]);
 
   // RAG Processing States
   const [processingStage, setProcessingStage] = useState(null);
@@ -64,6 +65,32 @@ export default function PromptDashboardApp({ onClose }) {
       commandBarRef.current.focus();
     }
   }, [showCommandBar]);
+
+  // Fetch uploaded local files on mount
+  useEffect(() => {
+    async function fetchLocalFiles() {
+      try {
+        // Fetch from backend: get all indexed local files
+        const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://ran-1.onrender.com'}/api/activity?limit=100`);
+        const data = await res.json();
+        if (data.success) {
+          // Filter for local uploads
+          const files = data.activity
+            .filter(a => a.type === 'upload' && a.status === 'success')
+            .map(a => a.message.match(/Processed (.+) into (\d+) chunks/))
+            .filter(Boolean)
+            .map(match => ({
+              name: match[1],
+              chunks: parseInt(match[2], 10)
+            }));
+          setLocalFiles(files);
+        }
+      } catch (err) {
+        // Ignore errors for now
+      }
+    }
+    fetchLocalFiles();
+  }, []);
 
   const grouped = groupSourcesByType(sources);
 
@@ -546,6 +573,43 @@ export default function PromptDashboardApp({ onClose }) {
                   onToggleUsed={idx => handleToggleUsed(type, idx)}
                 />
               ))}
+              {/* Local Files section */}
+              {localFiles.length > 0 && (
+                <div className="col-span-2 md:col-span-1">
+                  <div className="font-semibold mb-2">Local Files</div>
+                  <div className="space-y-2">
+                    {localFiles.map((file, idx) => (
+                      <div key={file.name} className="bg-gray-50 rounded p-3 flex flex-col">
+                        <div className="font-medium text-gray-900">{file.name}</div>
+                        <div className="text-xs text-gray-600">{file.chunks} chunks indexed</div>
+                        <Button
+                          size="sm"
+                          className="mt-2"
+                          variant={sources.some(s => s.type === 'local' && s.title === file.name && s.used) ? 'default' : 'outline'}
+                          onClick={() => {
+                            // Add or toggle this file as a source
+                            setSources(prev => {
+                              const exists = prev.find(s => s.type === 'local' && s.title === file.name);
+                              if (exists) {
+                                return prev.map(s =>
+                                  s.type === 'local' && s.title === file.name
+                                    ? { ...s, used: !s.used }
+                                    : s
+                                );
+                              } else {
+                                return [
+                                  ...prev,
+                                  { type: 'local', title: file.name, used: true }
+                                ];
+                              }
+                            });
+                          }}
+                        >{sources.some(s => s.type === 'local' && s.title === file.name && s.used) ? 'Deselect' : 'Select'} Source</Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

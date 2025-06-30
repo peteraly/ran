@@ -9,6 +9,9 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const path = require('path');
 require('dotenv').config();
+const { index } = require('./pinecone');
+const { OpenAI } = require('openai');
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -445,110 +448,12 @@ app.post('/api/webhook/:source', async (req, res) => {
 // Enhanced content retrieval with RAG processing
 app.post('/api/retrieve', async (req, res) => {
   try {
-    const { query, sources = [], limit = 10, filters = {} } = req.body;
-    const startTime = Date.now();
-    
-    logActivity('search', 'all', `Search query: "${query}"`, 'success');
-    sourceStats.searchQueries++;
-    
-    // Enhanced search with source filtering and relevance scoring
-    let results = contentIndex
-      .filter(item => {
-        // Filter by sources if specified
-        if (sources.length > 0) {
-          const itemSource = item.metadata.source;
-          if (!sources.some(source => itemSource.includes(source))) {
-            return false;
-          }
-        }
-        
-        // Apply additional filters
-        if (filters.dateFrom && new Date(item.metadata.indexedAt) < new Date(filters.dateFrom)) {
-          return false;
-        }
-        if (filters.dateTo && new Date(item.metadata.indexedAt) > new Date(filters.dateTo)) {
-          return false;
-        }
-        if (filters.type && item.metadata.type !== filters.type) {
-          return false;
-        }
-        
-        return true;
-      })
-      .map(item => {
-        // Calculate relevance score based on query matching
-        const content = Array.isArray(item.content) 
-          ? item.content.map(chunk => chunk.content).join(' ')
-          : item.content;
-        
-        const queryLower = query.toLowerCase();
-        const contentLower = content.toLowerCase();
-        
-        // Enhanced relevance scoring with semantic matching
-        let score = 0;
-        const queryWords = queryLower.split(' ').filter(word => word.length > 2);
-        queryWords.forEach(word => {
-          if (contentLower.includes(word)) {
-            score += 0.3;
-          }
-          // Partial word matching
-          if (contentLower.includes(word.substring(0, Math.floor(word.length * 0.7)))) {
-            score += 0.1;
-          }
-        });
-        
-        // Boost score for exact matches
-        if (contentLower.includes(queryLower)) {
-          score += 0.8;
-        }
-        
-        // Boost score for recent content
-        const daysSinceIndexed = (Date.now() - new Date(item.metadata.indexedAt).getTime()) / (1000 * 60 * 60 * 24);
-        if (daysSinceIndexed < 1) score += 0.4;
-        else if (daysSinceIndexed < 7) score += 0.2;
-        else if (daysSinceIndexed < 30) score += 0.1;
-        
-        // Boost score for title matches
-        const title = item.metadata.filename || item.metadata.title || item.metadata.subject || '';
-        if (title.toLowerCase().includes(queryLower)) {
-          score += 0.5;
-        }
-        
-        return {
-          id: item.id,
-          title: item.metadata.filename || item.metadata.title || item.metadata.subject || 'Untitled',
-          content: content.substring(0, 500) + (content.length > 500 ? '...' : ''),
-          source: item.metadata.source,
-          type: item.metadata.type,
-          timestamp: item.metadata.indexedAt,
-          score: Math.min(score, 1.0),
-          metadata: item.metadata
-        };
-      })
-      .filter(item => item.score > 0) // Only return relevant results
-      .sort((a, b) => b.score - a.score) // Sort by relevance
-      .slice(0, limit);
-    
-    const responseTime = Date.now() - startTime;
-    sourceStats.avgResponseTime = (sourceStats.avgResponseTime + responseTime) / 2;
-    
-    res.json({
-      success: true,
-      results,
-      total: results.length,
-      query,
-      sources,
-      filters,
-      responseTime,
-      processingTime: responseTime
-    });
+    const { query, sources, limit } = req.body;
+    const topK = limit || 5;
+    const relevantChunks = await retrieveRelevantChunksFromPinecone(query, topK);
+    res.json({ success: true, chunks: relevantChunks });
   } catch (error) {
-    console.error('Content retrieval error:', error);
-    logActivity('search', 'all', `Search failed: ${error.message}`, 'error');
-    res.status(500).json({
-      success: false,
-      error: 'Failed to retrieve content'
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -1085,87 +990,61 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
         error: 'No files uploaded'
       });
     }
-    
     const processedFiles = [];
-    
     for (const file of req.files) {
       try {
         let content = '';
-        
         if (file.mimetype === 'application/pdf') {
-          // Implement PDF parsing with pdf-parse
-          try {
-            const pdfData = await pdfParse(file.buffer);
-            content = pdfData.text;
-            console.log(`Successfully parsed PDF: ${file.originalname}, extracted ${content.length} characters`);
-          } catch (pdfError) {
-            console.error(`Error parsing PDF ${file.originalname}:`, pdfError);
-            content = `Error parsing PDF: ${pdfError.message}`;
+          // PDF parsing
+          const pdfData = await pdfParse(file.buffer);
+          content = pdfData.text;
+          if (!content || content.trim().length === 0) {
+            throw new Error('No text could be extracted from the PDF. The file may be scanned or image-based.');
           }
-        } else if (file.mimetype.includes('word') || file.originalname.endsWith('.docx')) {
-          // Implement DOCX parsing with mammoth
-          try {
-            const result = await mammoth.extractRawText({ buffer: file.buffer });
-            content = result.value;
-            console.log(`Successfully parsed DOCX: ${file.originalname}, extracted ${content.length} characters`);
-          } catch (docxError) {
-            console.error(`Error parsing DOCX ${file.originalname}:`, docxError);
-            content = `Error parsing DOCX: ${docxError.message}`;
-          }
+        } else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+          // DOCX parsing
+          const docxData = await mammoth.extractRawText({ buffer: file.buffer });
+          content = docxData.value;
+        } else if (file.mimetype.startsWith('text/')) {
+          content = file.buffer.toString('utf-8');
         } else {
-          content = file.buffer.toString('utf8');
+          throw new Error('Unsupported file type');
         }
-        
-        // Chunk the content for better indexing
-        const chunks = chunkContent(content, file.originalname);
-        
-        const processedFile = {
-          id: `file_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        // Chunk content
+        const chunkSize = 1000;
+        const overlap = 200;
+        const chunks = [];
+        let i = 0;
+        while (i < content.length) {
+          const chunkText = content.slice(i, i + chunkSize);
+          chunks.push({
+            id: `${file.originalname}-chunk-${i}`,
+            content: chunkText,
+          });
+          i += chunkSize - overlap;
+        }
+        // Index chunks in Pinecone
+        await indexChunksWithPinecone(chunks, { source: 'local', filename: file.originalname });
+        processedFiles.push({
           name: file.originalname,
           size: file.size,
-          type: file.mimetype,
           content: chunks,
-          uploadedAt: new Date().toISOString()
-        };
-        
-        processedFiles.push(processedFile);
-        
-        // Index each chunk separately for better retrieval
-        chunks.forEach((chunk, index) => {
-          contentIndex.push({
-            id: `${processedFile.id}_chunk_${index}`,
-            content: chunk.content,
-            metadata: {
-              source: 'local',
-              filename: file.originalname,
-              fileType: file.mimetype,
-              uploadedAt: processedFile.uploadedAt,
-              indexedAt: new Date().toISOString(),
-              chunkIndex: index,
-              totalChunks: chunks.length
-            }
-          });
+          type: file.mimetype,
+          error: null,
         });
-        
-        logActivity('upload', 'local', `Processed ${file.originalname} into ${chunks.length} chunks`, 'success');
-        
-      } catch (error) {
-        console.error(`Error processing file ${file.originalname}:`, error);
-        logActivity('upload', 'local', `Failed to process ${file.originalname}: ${error.message}`, 'error');
+      } catch (err) {
+        processedFiles.push({
+          name: file.originalname,
+          size: file.size,
+          content: [],
+          type: file.mimetype,
+          error: err.message,
+        });
       }
     }
-    
-    res.json({
-      success: true,
-      files: processedFiles,
-      message: `Successfully processed ${processedFiles.length} file(s)`
-    });
+    res.json({ success: true, files: processedFiles });
   } catch (error) {
-    console.error('File upload error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to process uploaded files'
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -1361,6 +1240,51 @@ app.post('/api/test/rag', async (req, res) => {
     });
   }
 });
+
+// Helper: Index chunks in Pinecone
+async function indexChunksWithPinecone(chunks, metadata) {
+  for (const chunk of chunks) {
+    // Generate embedding using OpenAI
+    const embeddingResponse = await openai.embeddings.create({
+      model: 'text-embedding-ada-002',
+      input: chunk.content,
+    });
+    const embedding = embeddingResponse.data[0].embedding;
+    await index.upsert([
+      {
+        id: chunk.id,
+        values: embedding,
+        metadata: {
+          ...metadata,
+          text: chunk.content,
+          chunk_id: chunk.id,
+        },
+      },
+    ]);
+  }
+}
+
+// Helper: Retrieve relevant chunks from Pinecone
+async function retrieveRelevantChunksFromPinecone(query, topK = 5) {
+  // Embed the query
+  const embeddingResponse = await openai.embeddings.create({
+    model: 'text-embedding-ada-002',
+    input: query,
+  });
+  const queryEmbedding = embeddingResponse.data[0].embedding;
+  // Query Pinecone
+  const results = await index.query({
+    vector: queryEmbedding,
+    topK,
+    includeMetadata: true,
+  });
+  return results.matches.map(match => ({
+    id: match.id,
+    score: match.score,
+    content: match.metadata.text,
+    metadata: match.metadata,
+  }));
+}
 
 // Error handling middleware
 app.use((error, req, res, next) => {
