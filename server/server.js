@@ -24,6 +24,10 @@ app.use(cors({
     'https://ran-et6u26nn3-peteralys-projects.vercel.app',
     'https://ran-eight.vercel.app',
     'https://ran-oej6u92pf-peteralys-projects.vercel.app',
+    'https://ran-bqtmmstz7-peteralys-projects.vercel.app',
+    'https://ran-nhv6pa4rv-peteralys-projects.vercel.app',
+    'https://ran-hbc37h4cy-peteralys-projects.vercel.app',
+    'https://ran-7mmw0v4hb-peteralys-projects.vercel.app',
     'https://*.vercel.app'
   ],
   credentials: true
