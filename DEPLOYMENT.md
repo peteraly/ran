@@ -1,69 +1,118 @@
 # Deployment Guide
 
-## Frontend (Vercel) - ✅ DEPLOYED
-- **Live URL**: https://ran-rdu3wvsel-peteralys-projects.vercel.app
+## 🚀 Current Deployment Status
+
+### Frontend (Vercel) - ✅ DEPLOYED
+- **Live URL**: https://ran-9s53094xu-peteralys-projects.vercel.app
 - **Status**: Successfully deployed and running
+- **Last Deployed**: June 30, 2025
 
-## Backend Deployment Options
+### Backend (Render.com) - 🔄 READY TO DEPLOY
+- **Configuration**: `render.yaml` is configured and ready
+- **Repository**: Connected to GitHub
+- **Status**: Ready for deployment
 
-### Option 1: Render.com (Recommended)
+## Backend Deployment Instructions
+
+### Option 1: Render.com (Recommended) - Use Blueprint
+1. Go to [render.com](https://render.com) and sign up/login
+2. Click "New +" → "Blueprint"
+3. Connect your GitHub repository: `https://github.com/peteraly/ran.git`
+4. Render will automatically detect the `render.yaml` configuration
+5. Click "Apply" to deploy
+
+### Option 2: Manual Render.com Setup
 1. Go to [render.com](https://render.com) and sign up/login
 2. Click "New +" → "Web Service"
-3. Connect your GitHub repository
+3. Connect your GitHub repository: `https://github.com/peteraly/ran.git`
 4. Configure:
-   - **Name**: `deliverable-dashboard-backend`
+   - **Name**: `ran-backend`
    - **Environment**: `Node`
    - **Build Command**: `cd server && npm install`
    - **Start Command**: `cd server && npm start`
    - **Plan**: Free
 
-### Option 2: Railway
-1. Go to [railway.app](https://railway.app) and sign up/login
-2. Click "New Project" → "Deploy from GitHub repo"
-3. Select your repository
-4. Set environment variables:
-   - `NODE_ENV=production`
-   - `PORT=10000`
+## Environment Variables Setup
 
-### Option 3: Heroku
-1. Install Heroku CLI: `npm install -g heroku`
-2. Run: `heroku create deliverable-dashboard-backend`
-3. Run: `git push heroku main`
-
-## Environment Variables
-
-### Backend (.env)
+### Required Environment Variables (Set in Render.com)
 ```env
 NODE_ENV=production
 PORT=10000
-FRONTEND_URL=https://ran-rdu3wvsel-peteralys-projects.vercel.app
+FRONTEND_URL=https://ran-9s53094xu-peteralys-projects.vercel.app
+PINECONE_API_KEY=your_pinecone_api_key
+PINECONE_INDEX=rag-index
+OPENAI_API_KEY=your_openai_api_key
 ```
 
-### Frontend (.env)
+### Frontend Environment Variables (Set in Vercel)
 ```env
-REACT_APP_API_URL=https://your-backend-url.com/api
+REACT_APP_API_URL=https://your-backend-url.onrender.com
 ```
 
 ## Update Frontend API URL
 
-After deploying the backend, update the frontend to use the new API URL:
+After deploying the backend:
 
-1. In `src/services/connections.js`, update the `API_BASE_URL`
-2. Redeploy frontend: `npx vercel --prod`
+1. Get your backend URL from Render.com (e.g., `https://ran-backend.onrender.com`)
+2. Go to Vercel Dashboard → Your Project → Settings → Environment Variables
+3. Add/Update: `REACT_APP_API_URL` = `https://your-backend-url.onrender.com`
+4. Redeploy frontend: `npx vercel --prod --yes`
 
 ## Testing Deployment
 
-1. **Frontend**: Visit https://ran-rdu3wvsel-peteralys-projects.vercel.app
-2. **Backend Health Check**: Visit `https://your-backend-url.com/api/health`
-3. **Test Connection**: Try adding a new source in the dashboard
+### 1. Frontend Test
+- Visit: https://ran-9s53094xu-peteralys-projects.vercel.app
+- Should load the RAG dashboard interface
+
+### 2. Backend Health Check
+- Visit: `https://your-backend-url.onrender.com/api/health`
+- Should return: `{"status":"healthy","timestamp":"...","contentIndexSize":0}`
+
+### 3. API Connection Test
+- Visit: `https://your-backend-url.onrender.com/api/debug/env`
+- Should show environment variable status
+
+### 4. Full System Test
+1. Open the frontend
+2. Click "Add Source" → "Local Files"
+3. Upload a PDF or text file
+4. Try generating a prompt with the uploaded content
 
 ## Troubleshooting
 
 ### Common Issues:
-- **CORS Errors**: Ensure backend CORS includes frontend URL
-- **API Timeouts**: Check backend logs for errors
-- **Build Failures**: Verify all dependencies are in package.json
 
-### Logs:
+#### CORS Errors
+- Ensure backend CORS includes frontend URL
+- Check `FRONTEND_URL` environment variable in Render.com
+
+#### API Timeouts
+- Check backend logs in Render.com dashboard
+- Verify all environment variables are set
+
+#### Build Failures
+- Check Render.com build logs
+- Verify all dependencies are in `server/package.json`
+
+#### Pinecone Errors
+- Verify `PINECONE_API_KEY` and `PINECONE_INDEX` are set
+- Check Pinecone dashboard for index status
+
+### Logs Access:
 - **Vercel**: Check deployment logs in Vercel dashboard
-- **Backend**: Check service logs in your hosting platform 
+- **Render**: Check service logs in Render.com dashboard
+
+## Quick Deploy Commands
+
+```bash
+# Deploy frontend
+npx vercel --prod --yes
+
+# Deploy backend (after setting up Render.com)
+git push origin main  # Triggers automatic deployment if using Blueprint
+```
+
+## Current URLs
+- **Frontend**: https://ran-9s53094xu-peteralys-projects.vercel.app
+- **Backend**: Will be available after Render.com deployment
+- **Repository**: https://github.com/peteraly/ran.git 
