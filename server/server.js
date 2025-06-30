@@ -1088,8 +1088,17 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
           i += chunkSize - overlap;
         }
         // Index chunks in Pinecone
-        await indexChunksWithPinecone(chunks, { source: 'local', filename: safeFilename });
+        console.log(`Attempting to index ${chunks.length} chunks for file: ${safeFilename}`);
+        try {
+          await indexChunksWithPinecone(chunks, { source: 'local', filename: safeFilename });
+          console.log(`Successfully indexed ${chunks.length} chunks in Pinecone`);
+        } catch (pineconeError) {
+          console.error('Pinecone indexing failed:', pineconeError);
+          // Continue processing even if Pinecone fails
+        }
+        
         // Add summary record to contentIndex for dashboard visibility
+        console.log('Adding file to contentIndex for dashboard visibility');
         contentIndex.push({
           id: `${safeFilename}-${Date.now()}`,
           content: content.slice(0, 5000), // Store up to 5000 chars as preview
@@ -1320,24 +1329,42 @@ app.post('/api/test/rag', async (req, res) => {
 
 // Helper: Index chunks in Pinecone
 async function indexChunksWithPinecone(chunks, metadata) {
-  for (const chunk of chunks) {
-    // Generate embedding using OpenAI
-    const embeddingResponse = await openai.embeddings.create({
-      model: 'text-embedding-ada-002',
-      input: chunk.content,
-    });
-    const embedding = embeddingResponse.data[0].embedding;
-    await index.upsert([
-      {
-        id: chunk.id,
-        values: embedding,
-        metadata: {
-          ...metadata,
-          text: chunk.content,
-          chunk_id: chunk.id,
+  console.log('Starting Pinecone indexing with metadata:', metadata);
+  console.log('Pinecone API Key available:', !!process.env.PINECONE_API_KEY);
+  console.log('Pinecone Index name:', process.env.PINECONE_INDEX || 'rag-index');
+  
+  try {
+    for (const chunk of chunks) {
+      console.log(`Processing chunk: ${chunk.id}`);
+      
+      // Generate embedding using OpenAI
+      console.log('Generating embedding for chunk...');
+      const embeddingResponse = await openai.embeddings.create({
+        model: 'text-embedding-ada-002',
+        input: chunk.content,
+      });
+      const embedding = embeddingResponse.data[0].embedding;
+      console.log('Embedding generated successfully, length:', embedding.length);
+      
+      // Upsert to Pinecone
+      console.log('Upserting to Pinecone...');
+      await index.upsert([
+        {
+          id: chunk.id,
+          values: embedding,
+          metadata: {
+            ...metadata,
+            text: chunk.content,
+            chunk_id: chunk.id,
+          },
         },
-      },
-    ]);
+      ]);
+      console.log(`Successfully upserted chunk: ${chunk.id}`);
+    }
+    console.log('All chunks indexed successfully in Pinecone');
+  } catch (error) {
+    console.error('Error in indexChunksWithPinecone:', error);
+    throw error;
   }
 }
 
@@ -1476,6 +1503,19 @@ app.post('/api/web/search', async (req, res) => {
       error: 'Failed to perform web search'
     });
   }
+});
+
+// Debug endpoint to check environment variables
+app.get('/api/debug/env', (req, res) => {
+  res.json({
+    success: true,
+    env: {
+      PINECONE_API_KEY: process.env.PINECONE_API_KEY ? 'SET' : 'NOT SET',
+      PINECONE_INDEX: process.env.PINECONE_INDEX || 'rag-index',
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY ? 'SET' : 'NOT SET',
+      NODE_ENV: process.env.NODE_ENV
+    }
+  });
 });
 
 // Error handling middleware
