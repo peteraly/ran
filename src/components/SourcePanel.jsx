@@ -6,6 +6,7 @@ const TYPE_ICONS = {
   teams: <MessageSquare className="h-4 w-4" />,
   internal_db: <Database className="h-4 w-4" />,
   web: <Globe className="h-4 w-4" />,
+  local: <FileText className="h-4 w-4" />,
 };
 
 export default function SourcePanel({ sources, onSourceToggle, onAddSource }) {
@@ -165,6 +166,30 @@ export default function SourcePanel({ sources, onSourceToggle, onAddSource }) {
                         >
                           {src.url}
                         </a>
+                      </div>
+                    )}
+                  </>
+                )}
+                
+                {/* Local Uploaded Files */}
+                {type === 'local' && (
+                  <>
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900 line-clamp-1">{src.title}</div>
+                        <div className="text-sm text-gray-600 mt-1">Uploaded File • {src.chunks || 0} chunks</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">{src.date}</span>
+                        {src.used && <Check className="h-4 w-4 text-blue-500" />}
+                      </div>
+                    </div>
+                    {expandedSource === `${type}-${idx}` && (
+                      <div className="mt-2 pt-2 border-t border-gray-100">
+                        <div className="text-sm text-gray-700">{src.title}</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          Source: {src.source} • Chunks: {src.chunks || 0}
+                        </div>
                       </div>
                     )}
                   </>

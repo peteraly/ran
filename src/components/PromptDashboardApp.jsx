@@ -96,6 +96,30 @@ export default function PromptDashboardApp({ onClose }) {
               chunks: parseInt(match[2], 10)
             }));
           setLocalFiles(files);
+          
+          // Convert uploaded files to source format for sidebar
+          const uploadedSources = files.map((file, index) => ({
+            id: `uploaded_${index}`,
+            type: 'local',
+            title: file.name,
+            subject: file.name,
+            from: 'Uploaded File',
+            date: 'Recently uploaded',
+            used: false,
+            chunks: file.chunks,
+            source: 'local',
+            metadata: {
+              filename: file.name,
+              source: 'local',
+              chunks: file.chunks
+            }
+          }));
+          
+          // Add uploaded files to sources
+          setSources(prev => {
+            const existingSources = prev.filter(s => s.type !== 'local');
+            return [...existingSources, ...uploadedSources];
+          });
         }
       } catch (err) {
         console.log('Activity fetch failed, continuing without local files:', err.message);
