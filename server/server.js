@@ -23,30 +23,24 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    const allowedOrigins = [
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://localhost:3002',
-      'https://ran-et6u26nn3-peteralys-projects.vercel.app',
-      'https://ran-eight.vercel.app',
-      'https://ran-oej6u92pf-peteralys-projects.vercel.app',
-      'https://ran-bqtmmstz7-peteralys-projects.vercel.app',
-      'https://ran-nhv6pa4rv-peteralys-projects.vercel.app',
-      'https://ran-hbc37h4cy-peteralys-projects.vercel.app',
-      'https://ran-7mmw0v4hb-peteralys-projects.vercel.app',
-      'https://ran-5c9a2mcqz-peteralys-projects.vercel.app'
-    ];
-    
-    // Allow any Vercel domain
+    // Allow any Vercel domain or localhost
     if (origin.includes('vercel.app') || origin.includes('localhost')) {
       return callback(null, true);
     }
+    
+    // Allow specific domains if needed
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:3002'
+    ];
     
     if (allowedOrigins.indexOf(origin) !== -1) {
       return callback(null, true);
     }
     
-    return callback(null, true); // Allow all origins for now
+    // For development, allow all origins
+    return callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
