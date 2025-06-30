@@ -14,6 +14,91 @@ const SOURCE_TYPES = {
     category: 'local'
   },
   
+  // Email & Communication
+  gmail: {
+    name: 'Gmail',
+    description: 'Access emails, attachments, and labels',
+    icon: '📧',
+    authType: 'oauth',
+    scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
+    color: 'bg-red-500',
+    category: 'email'
+  },
+  outlook: {
+    name: 'Outlook',
+    description: 'Access emails, calendar, and contacts',
+    icon: '📨',
+    authType: 'oauth',
+    scopes: ['Mail.Read', 'Calendars.Read', 'Contacts.Read'],
+    color: 'bg-blue-600',
+    category: 'email'
+  },
+  imap: {
+    name: 'IMAP Email',
+    description: 'Connect to any IMAP email server',
+    icon: '📬',
+    authType: 'imap',
+    scopes: [],
+    color: 'bg-purple-500',
+    category: 'email'
+  },
+  exchange: {
+    name: 'Exchange Server',
+    description: 'Connect to Microsoft Exchange server',
+    icon: '🏢',
+    authType: 'exchange',
+    scopes: [],
+    color: 'bg-blue-700',
+    category: 'email'
+  },
+  
+  // Messaging & Chat
+  slack: {
+    name: 'Slack',
+    description: 'Access channels, messages, and files',
+    icon: '💬',
+    authType: 'oauth',
+    scopes: ['channels:read', 'files:read', 'users:read', 'groups:read'],
+    color: 'bg-purple-500',
+    category: 'messaging'
+  },
+  teams: {
+    name: 'Microsoft Teams',
+    description: 'Access teams, channels, and messages',
+    icon: '👥',
+    authType: 'oauth',
+    scopes: ['Channel.ReadBasic.All', 'Chat.Read', 'Files.Read'],
+    color: 'bg-blue-500',
+    category: 'messaging'
+  },
+  discord: {
+    name: 'Discord',
+    description: 'Access Discord servers and channels',
+    icon: '🎮',
+    authType: 'oauth',
+    scopes: ['identify', 'guilds.read'],
+    color: 'bg-indigo-500',
+    category: 'messaging'
+  },
+  telegram: {
+    name: 'Telegram',
+    description: 'Access Telegram channels and messages',
+    icon: '📱',
+    authType: 'bot',
+    scopes: [],
+    color: 'bg-blue-400',
+    category: 'messaging'
+  },
+  whatsapp: {
+    name: 'WhatsApp Business',
+    description: 'Access WhatsApp Business messages',
+    icon: '📞',
+    authType: 'api',
+    scopes: [],
+    color: 'bg-green-500',
+    category: 'messaging'
+  },
+  
   // Internal Databases
   postgres: {
     name: 'PostgreSQL',
@@ -60,37 +145,109 @@ const SOURCE_TYPES = {
     color: 'bg-yellow-600',
     category: 'internal'
   },
+  sqlserver: {
+    name: 'SQL Server',
+    description: 'Connect to Microsoft SQL Server',
+    icon: '🗄️',
+    authType: 'database',
+    scopes: ['read', 'write'],
+    color: 'bg-red-600',
+    category: 'internal'
+  },
+  oracle: {
+    name: 'Oracle Database',
+    description: 'Connect to Oracle database',
+    icon: '🏛️',
+    authType: 'database',
+    scopes: ['read', 'write'],
+    color: 'bg-red-700',
+    category: 'internal'
+  },
+  snowflake: {
+    name: 'Snowflake',
+    description: 'Connect to Snowflake data warehouse',
+    icon: '❄️',
+    authType: 'database',
+    scopes: ['read', 'write'],
+    color: 'bg-blue-400',
+    category: 'internal'
+  },
+  bigquery: {
+    name: 'BigQuery',
+    description: 'Connect to Google BigQuery',
+    icon: '📊',
+    authType: 'oauth',
+    scopes: ['https://www.googleapis.com/auth/bigquery.readonly'],
+    color: 'bg-blue-500',
+    category: 'internal'
+  },
   
-  // External Databases & APIs
-  api: {
-    name: 'REST API',
-    description: 'Connect to external REST API endpoints',
-    icon: '🔌',
+  // Enterprise Systems
+  sharepoint: {
+    name: 'SharePoint',
+    description: 'Access SharePoint sites and documents',
+    icon: '📋',
+    authType: 'oauth',
+    scopes: ['Sites.Read.All', 'Files.Read.All'],
+    color: 'bg-blue-600',
+    category: 'enterprise'
+  },
+  confluence: {
+    name: 'Confluence',
+    description: 'Access Confluence pages and spaces',
+    icon: '📚',
+    authType: 'oauth',
+    scopes: ['read:confluence-content'],
+    color: 'bg-blue-600',
+    category: 'enterprise'
+  },
+  jira: {
+    name: 'Jira',
+    description: 'Access Jira projects and issues',
+    icon: '🎫',
+    authType: 'oauth',
+    scopes: ['read:jira-work', 'read:jira-user'],
+    color: 'bg-blue-500',
+    category: 'enterprise'
+  },
+  servicenow: {
+    name: 'ServiceNow',
+    description: 'Access ServiceNow incidents and knowledge base',
+    icon: '🛠️',
     authType: 'api',
     scopes: [],
-    color: 'bg-purple-500',
-    category: 'external'
+    color: 'bg-orange-500',
+    category: 'enterprise'
   },
-  webhook: {
-    name: 'Webhook',
-    description: 'Set up webhook for real-time data',
-    icon: '🪝',
-    authType: 'webhook',
-    scopes: [],
-    color: 'bg-indigo-500',
-    category: 'external'
+  salesforce: {
+    name: 'Salesforce',
+    description: 'Access Salesforce CRM data',
+    icon: '☁️',
+    authType: 'oauth',
+    scopes: ['api'],
+    color: 'bg-blue-500',
+    category: 'enterprise'
   },
-  rss: {
-    name: 'RSS Feed',
-    description: 'Subscribe to RSS feeds for updates',
-    icon: '📡',
-    authType: 'url',
+  workday: {
+    name: 'Workday',
+    description: 'Access Workday HR and finance data',
+    icon: '👥',
+    authType: 'api',
     scopes: [],
-    color: 'bg-orange-400',
-    category: 'external'
+    color: 'bg-orange-600',
+    category: 'enterprise'
+  },
+  sap: {
+    name: 'SAP',
+    description: 'Connect to SAP ERP system',
+    icon: '🏭',
+    authType: 'api',
+    scopes: [],
+    color: 'bg-blue-700',
+    category: 'enterprise'
   },
   
-  // Cloud Storage
+  // Cloud Storage & File Systems
   s3: {
     name: 'AWS S3',
     description: 'Access files stored in Amazon S3',
@@ -127,17 +284,17 @@ const SOURCE_TYPES = {
     color: 'bg-blue-700',
     category: 'cloud'
   },
-  
-  // Productivity Apps
-  slack: {
-    name: 'Slack',
-    description: 'Connect to Slack workspaces to access messages and files',
-    icon: '💬',
+  googledrive: {
+    name: 'Google Drive',
+    description: 'Access documents, spreadsheets, and presentations',
+    icon: '📁',
     authType: 'oauth',
-    scopes: ['channels:read', 'files:read', 'users:read'],
-    color: 'bg-purple-500',
-    category: 'apps'
+    scopes: ['https://www.googleapis.com/auth/drive.readonly'],
+    color: 'bg-blue-500',
+    category: 'cloud'
   },
+  
+  // Productivity & Collaboration
   notion: {
     name: 'Notion',
     description: 'Access workspace pages and databases',
@@ -145,25 +302,7 @@ const SOURCE_TYPES = {
     authType: 'oauth',
     scopes: ['read'],
     color: 'bg-gray-800',
-    category: 'apps'
-  },
-  jira: {
-    name: 'Jira',
-    description: 'Access Jira projects and issues',
-    icon: '🎫',
-    authType: 'oauth',
-    scopes: ['read:jira-work', 'read:jira-user'],
-    color: 'bg-blue-500',
-    category: 'apps'
-  },
-  confluence: {
-    name: 'Confluence',
-    description: 'Access Confluence pages and spaces',
-    icon: '📚',
-    authType: 'oauth',
-    scopes: ['read:confluence-content'],
-    color: 'bg-blue-600',
-    category: 'apps'
+    category: 'productivity'
   },
   github: {
     name: 'GitHub',
@@ -172,7 +311,7 @@ const SOURCE_TYPES = {
     authType: 'oauth',
     scopes: ['repo', 'read:user'],
     color: 'bg-gray-900',
-    category: 'apps'
+    category: 'productivity'
   },
   gitlab: {
     name: 'GitLab',
@@ -181,7 +320,7 @@ const SOURCE_TYPES = {
     authType: 'oauth',
     scopes: ['read_api'],
     color: 'bg-orange-500',
-    category: 'apps'
+    category: 'productivity'
   },
   trello: {
     name: 'Trello',
@@ -190,7 +329,7 @@ const SOURCE_TYPES = {
     authType: 'oauth',
     scopes: ['read'],
     color: 'bg-blue-500',
-    category: 'apps'
+    category: 'productivity'
   },
   asana: {
     name: 'Asana',
@@ -199,27 +338,177 @@ const SOURCE_TYPES = {
     authType: 'oauth',
     scopes: ['default'],
     color: 'bg-orange-500',
-    category: 'apps'
+    category: 'productivity'
+  },
+  monday: {
+    name: 'Monday.com',
+    description: 'Access Monday.com boards and items',
+    icon: '📅',
+    authType: 'oauth',
+    scopes: ['boards:read'],
+    color: 'bg-red-500',
+    category: 'productivity'
+  },
+  clickup: {
+    name: 'ClickUp',
+    description: 'Access ClickUp spaces and tasks',
+    icon: '🎯',
+    authType: 'oauth',
+    scopes: ['read'],
+    color: 'bg-purple-500',
+    category: 'productivity'
   },
   
-  // Communication & Email
-  google: {
-    name: 'Google Drive',
-    description: 'Access documents, spreadsheets, and presentations',
-    icon: '📁',
+  // Social Media & News
+  linkedin: {
+    name: 'LinkedIn',
+    description: 'Access LinkedIn posts and company updates',
+    icon: '💼',
     authType: 'oauth',
-    scopes: ['https://www.googleapis.com/auth/drive.readonly'],
-    color: 'bg-blue-500',
-    category: 'apps'
+    scopes: ['r_liteprofile', 'r_emailaddress'],
+    color: 'bg-blue-600',
+    category: 'social'
   },
-  microsoft: {
-    name: 'Microsoft 365',
-    description: 'Read emails, calendar, and OneDrive files',
-    icon: '📧',
+  twitter: {
+    name: 'Twitter',
+    description: 'Access Twitter posts and conversations',
+    icon: '🐦',
     authType: 'oauth',
-    scopes: ['Mail.Read', 'Files.Read', 'Calendars.Read'],
+    scopes: ['tweet.read', 'users.read'],
+    color: 'bg-blue-400',
+    category: 'social'
+  },
+  reddit: {
+    name: 'Reddit',
+    description: 'Access Reddit posts and comments',
+    icon: '🤖',
+    authType: 'oauth',
+    scopes: ['read'],
     color: 'bg-orange-500',
-    category: 'apps'
+    category: 'social'
+  },
+  facebook: {
+    name: 'Facebook',
+    description: 'Access Facebook pages and posts',
+    icon: '📘',
+    authType: 'oauth',
+    scopes: ['pages_read_engagement'],
+    color: 'bg-blue-600',
+    category: 'social'
+  },
+  
+  // News & Research
+  rss: {
+    name: 'RSS Feeds',
+    description: 'Subscribe to RSS feeds for updates',
+    icon: '📡',
+    authType: 'url',
+    scopes: [],
+    color: 'bg-orange-400',
+    category: 'research'
+  },
+  newsapi: {
+    name: 'News API',
+    description: 'Access news articles and headlines',
+    icon: '📰',
+    authType: 'api',
+    scopes: [],
+    color: 'bg-red-500',
+    category: 'research'
+  },
+  arxiv: {
+    name: 'arXiv',
+    description: 'Access academic papers and research',
+    icon: '📚',
+    authType: 'api',
+    scopes: [],
+    color: 'bg-green-600',
+    category: 'research'
+  },
+  pubmed: {
+    name: 'PubMed',
+    description: 'Access medical and scientific literature',
+    icon: '🏥',
+    authType: 'api',
+    scopes: [],
+    color: 'bg-blue-600',
+    category: 'research'
+  },
+  
+  // Financial & Market Data
+  bloomberg: {
+    name: 'Bloomberg Terminal',
+    description: 'Access Bloomberg market data and news',
+    icon: '📈',
+    authType: 'api',
+    scopes: [],
+    color: 'bg-orange-500',
+    category: 'financial'
+  },
+  yahoo_finance: {
+    name: 'Yahoo Finance',
+    description: 'Access stock prices and financial data',
+    icon: '💰',
+    authType: 'api',
+    scopes: [],
+    color: 'bg-purple-500',
+    category: 'financial'
+  },
+  alpha_vantage: {
+    name: 'Alpha Vantage',
+    description: 'Access real-time and historical market data',
+    icon: '📊',
+    authType: 'api',
+    scopes: [],
+    color: 'bg-blue-500',
+    category: 'financial'
+  },
+  coinbase: {
+    name: 'Coinbase',
+    description: 'Access cryptocurrency data and prices',
+    icon: '₿',
+    authType: 'api',
+    scopes: [],
+    color: 'bg-blue-500',
+    category: 'financial'
+  },
+  
+  // External APIs & Web Services
+  api: {
+    name: 'REST API',
+    description: 'Connect to external REST API endpoints',
+    icon: '🔌',
+    authType: 'api',
+    scopes: [],
+    color: 'bg-purple-500',
+    category: 'external'
+  },
+  webhook: {
+    name: 'Webhook',
+    description: 'Set up webhook for real-time data',
+    icon: '🪝',
+    authType: 'webhook',
+    scopes: [],
+    color: 'bg-indigo-500',
+    category: 'external'
+  },
+  graphql: {
+    name: 'GraphQL API',
+    description: 'Connect to GraphQL API endpoints',
+    icon: '🔗',
+    authType: 'api',
+    scopes: [],
+    color: 'bg-pink-500',
+    category: 'external'
+  },
+  soap: {
+    name: 'SOAP API',
+    description: 'Connect to SOAP web services',
+    icon: '🧼',
+    authType: 'api',
+    scopes: [],
+    color: 'bg-gray-500',
+    category: 'external'
   },
   
   // Automation & Integration
@@ -230,7 +519,25 @@ const SOURCE_TYPES = {
     authType: 'api',
     scopes: [],
     color: 'bg-orange-500',
-    category: 'tools'
+    category: 'automation'
+  },
+  ifttt: {
+    name: 'IFTTT',
+    description: 'Connect to IFTTT applets and triggers',
+    icon: '🔧',
+    authType: 'api',
+    scopes: [],
+    color: 'bg-red-500',
+    category: 'automation'
+  },
+  n8n: {
+    name: 'n8n',
+    description: 'Connect to n8n workflows and nodes',
+    icon: '🔄',
+    authType: 'api',
+    scopes: [],
+    color: 'bg-purple-500',
+    category: 'automation'
   },
   
   // Web Sources
@@ -242,6 +549,26 @@ const SOURCE_TYPES = {
     scopes: [],
     color: 'bg-indigo-500',
     category: 'web'
+  },
+  
+  // Custom & Advanced
+  custom: {
+    name: 'Custom Connector',
+    description: 'Create a custom data source connector',
+    icon: '⚙️',
+    authType: 'custom',
+    scopes: [],
+    color: 'bg-gray-600',
+    category: 'custom'
+  },
+  email_forward: {
+    name: 'Email Forwarding',
+    description: 'Forward emails to prompt@yourapp.ai for automatic indexing',
+    icon: '📧',
+    authType: 'email',
+    scopes: [],
+    color: 'bg-blue-500',
+    category: 'automated'
   }
 };
 
@@ -671,23 +998,90 @@ export default function AddSourceModal({ onClose, onAdd }) {
     }
   };
 
-  // Group sources by category
-  const groupedSources = Object.entries(SOURCE_TYPES).reduce((acc, [key, source]) => {
-    if (!acc[source.category]) {
-      acc[source.category] = [];
-    }
-    acc[source.category].push({ key, ...source });
-    return acc;
-  }, {});
+  const renderSourceSelection = () => {
+    const categories = {
+      email: { name: 'Email & Communication', icon: '📧' },
+      messaging: { name: 'Messaging & Chat', icon: '💬' },
+      internal: { name: 'Internal Databases', icon: '🗄️' },
+      enterprise: { name: 'Enterprise Systems', icon: '🏢' },
+      cloud: { name: 'Cloud Storage', icon: '☁️' },
+      productivity: { name: 'Productivity Tools', icon: '📊' },
+      social: { name: 'Social Media', icon: '📱' },
+      research: { name: 'Research & News', icon: '📰' },
+      financial: { name: 'Financial Data', icon: '💰' },
+      external: { name: 'External APIs', icon: '🔌' },
+      automation: { name: 'Automation Tools', icon: '⚡' },
+      web: { name: 'Web Sources', icon: '🌐' },
+      local: { name: 'Local Files', icon: '💾' },
+      custom: { name: 'Custom & Advanced', icon: '⚙️' },
+      automated: { name: 'Automated Sources', icon: '🤖' }
+    };
 
-  const categoryNames = {
-    local: 'Local & Files',
-    internal: 'Internal Databases',
-    external: 'External APIs',
-    cloud: 'Cloud Storage',
-    apps: 'Productivity Apps',
-    tools: 'Automation Tools',
-    web: 'Web Sources'
+    const groupedSources = {};
+    Object.entries(SOURCE_TYPES).forEach(([key, source]) => {
+      if (!groupedSources[source.category]) {
+        groupedSources[source.category] = [];
+      }
+      groupedSources[source.category].push({ key, ...source });
+    });
+
+    return (
+      <div className="space-y-6">
+        <div className="text-center">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            Connect Your Data Sources
+          </h3>
+          <p className="text-sm text-gray-600">
+            Choose from 50+ data sources to aggregate and search across all your information
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
+          {Object.entries(groupedSources).map(([category, sources]) => (
+            <div key={category} className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <span className="text-lg">{categories[category]?.icon}</span>
+                <h4 className="font-medium text-gray-900 text-sm">
+                  {categories[category]?.name}
+                </h4>
+              </div>
+              <div className="space-y-2">
+                {sources.map((source) => (
+                  <button
+                    key={source.key}
+                    onClick={() => handleSourceSelect(source.key)}
+                    className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors group"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-8 h-8 rounded-lg ${source.color} flex items-center justify-center text-white text-sm font-medium`}>
+                        {source.icon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-gray-900 text-sm truncate">
+                          {source.name}
+                        </div>
+                        <div className="text-xs text-gray-500 truncate">
+                          {source.description}
+                        </div>
+                      </div>
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="text-center pt-4 border-t border-gray-200">
+          <p className="text-xs text-gray-500">
+            Can't find what you're looking for? Use the "Custom Connector" to connect any data source.
+          </p>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -705,28 +1099,7 @@ export default function AddSourceModal({ onClose, onAdd }) {
 
         <div className="flex-1 p-6 overflow-y-auto">
           {!selectedType ? (
-            <div className="space-y-10">
-              {Object.entries(groupedSources).map(([category, sources]) => (
-                <section key={category} className="mb-2">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4 pl-1">{categoryNames[category]}</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                    {sources.map((source) => (
-                      <button
-                        key={source.key}
-                        onClick={() => handleSourceSelect(source.key)}
-                        className="p-5 bg-white border border-gray-200 rounded-xl shadow hover:border-blue-400 hover:bg-blue-50 transition text-left flex flex-col gap-2"
-                      >
-                        <div className="flex items-center gap-3 mb-1">
-                          <span className="text-2xl">{source.icon}</span>
-                          <span className="font-medium text-gray-900">{source.name}</span>
-                        </div>
-                        <p className="text-sm text-gray-600">{source.description}</p>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
+            renderSourceSelection()
           ) : (
             <div className="space-y-4">
               <button
