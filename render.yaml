@@ -3,13 +3,13 @@ services:
     name: ran-backend
     env: node
     plan: free
-    buildCommand: npm install
-    startCommand: npm start
-    rootDir: server
+    buildCommand: cd server && npm install
+    startCommand: cd server && npm start
+    rootDir: .
     envVars:
       - key: PORT
         value: 10000
       - key: NODE_ENV
         value: production
       - key: FRONTEND_URL
-        value: https://ran-8lzeudska-peteralys-projects.vercel.app 
+        value: https://ran-9s53094xu-peteralys-projects.vercel.app 
