@@ -16,6 +16,7 @@ app.use(cors({
     process.env.FRONTEND_URL || 'http://localhost:3000',
     'https://ran-et6u26nn3-peteralys-projects.vercel.app',
     'https://ran-eight.vercel.app',
+    'https://ran-oej6u92pf-peteralys-projects.vercel.app',
     'https://*.vercel.app'
   ],
   credentials: true
