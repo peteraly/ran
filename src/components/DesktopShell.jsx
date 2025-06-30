@@ -97,17 +97,9 @@ export default function DesktopShell() {
       if (type === 'local' && metadata.files) {
         // Process uploaded files
         processedContent = await processUploadedFiles(metadata.files);
-        sourceName = `Local Files (${metadata.files.length})`;
+        sourceName = `Local Files (${processedContent.length})`;
         
-        // Index the content
-        for (const file of processedContent) {
-          await indexContent(file.content, {
-            source: 'local',
-            filename: file.name,
-            fileType: file.type,
-            uploadedAt: file.uploadedAt
-          });
-        }
+        // Backend automatically indexes content during upload
       } else if (type === 'web' && metadata.url) {
         // Process web content
         processedContent = await processWebContent(metadata.url);
@@ -140,7 +132,7 @@ export default function DesktopShell() {
                 <div key={index} className="p-3 bg-gray-50 rounded-lg">
                   <div className="font-medium">{file.name}</div>
                   <div className="text-sm text-gray-600">
-                    {(file.size / 1024).toFixed(1)} KB • {file.content.length} chunks indexed
+                    {(file.size / 1024).toFixed(1)} KB • {Array.isArray(file.content) ? file.content.length : 1} chunks indexed
                   </div>
                 </div>
               ))}

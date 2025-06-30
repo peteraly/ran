@@ -3,6 +3,10 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const multer = require('multer');
+const pdfParse = require('pdf-parse');
+const mammoth = require('mammoth');
+const axios = require('axios');
+const cheerio = require('cheerio');
 const path = require('path');
 require('dotenv').config();
 
@@ -970,18 +974,99 @@ app.get('/api/scrape', async (req, res) => {
       });
     }
     
-    // TODO: Implement proper web scraping with cheerio
-    // For now, return mock data
-    const mockData = {
-      title: `Content from ${new URL(url).hostname}`,
-      content: `This is mock content scraped from ${url}. In a real implementation, this would contain the actual content from the webpage.`,
-      url: url
-    };
-    
-    res.json({
-      success: true,
-      ...mockData
-    });
+    // Implement proper web scraping with cheerio
+    try {
+      const response = await axios.get(url, {
+        timeout: 10000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+      });
+      
+      const $ = cheerio.load(response.data);
+      
+      // Extract title
+      const title = $('title').text().trim() || $('h1').first().text().trim() || new URL(url).hostname;
+      
+      // Remove script and style elements
+      $('script, style, nav, header, footer, .nav, .header, .footer, .sidebar, .ad, .advertisement').remove();
+      
+      // Extract main content
+      let content = '';
+      
+      // Try to find main content areas
+      const mainSelectors = [
+        'main',
+        'article',
+        '.content',
+        '.main-content',
+        '#content',
+        '#main',
+        '.post-content',
+        '.entry-content'
+      ];
+      
+      for (const selector of mainSelectors) {
+        const element = $(selector);
+        if (element.length > 0) {
+          content = element.text().trim();
+          break;
+        }
+      }
+      
+      // If no main content found, use body text
+      if (!content) {
+        content = $('body').text().trim();
+      }
+      
+      // Clean up the content
+      content = content
+        .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+        .replace(/\n\s*\n/g, '\n\n') // Clean up line breaks
+        .trim();
+      
+      // Limit content length
+      if (content.length > 50000) {
+        content = content.substring(0, 50000) + '...';
+      }
+      
+      console.log(`Successfully scraped ${url}, extracted ${content.length} characters`);
+      
+      // Index the scraped content
+      const chunks = chunkContent(content, `web_${new URL(url).hostname}`);
+      chunks.forEach((chunk, index) => {
+        contentIndex.push({
+          id: `web_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_chunk_${index}`,
+          content: chunk.content,
+          metadata: {
+            source: 'web',
+            url: url,
+            title: title,
+            scrapedAt: new Date().toISOString(),
+            indexedAt: new Date().toISOString(),
+            chunkIndex: index,
+            totalChunks: chunks.length
+          }
+        });
+      });
+      
+      logActivity('scrape', 'web', `Scraped ${url} into ${chunks.length} chunks`, 'success');
+      
+      res.json({
+        success: true,
+        title: title,
+        content: content,
+        url: url,
+        chunks: chunks.length
+      });
+      
+    } catch (scrapeError) {
+      console.error(`Error scraping ${url}:`, scrapeError);
+      res.status(500).json({
+        success: false,
+        error: `Failed to scrape web content: ${scrapeError.message}`
+      });
+    }
   } catch (error) {
     console.error('Web scraping error:', error);
     res.status(500).json({
@@ -1008,41 +1093,65 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
         let content = '';
         
         if (file.mimetype === 'application/pdf') {
-          // TODO: Implement PDF parsing with pdf-parse
-          content = `PDF content from ${file.originalname} (parsing not yet implemented)`;
+          // Implement PDF parsing with pdf-parse
+          try {
+            const pdfData = await pdfParse(file.buffer);
+            content = pdfData.text;
+            console.log(`Successfully parsed PDF: ${file.originalname}, extracted ${content.length} characters`);
+          } catch (pdfError) {
+            console.error(`Error parsing PDF ${file.originalname}:`, pdfError);
+            content = `Error parsing PDF: ${pdfError.message}`;
+          }
         } else if (file.mimetype.includes('word') || file.originalname.endsWith('.docx')) {
-          // TODO: Implement DOCX parsing with mammoth
-          content = `Word document content from ${file.originalname} (parsing not yet implemented)`;
+          // Implement DOCX parsing with mammoth
+          try {
+            const result = await mammoth.extractRawText({ buffer: file.buffer });
+            content = result.value;
+            console.log(`Successfully parsed DOCX: ${file.originalname}, extracted ${content.length} characters`);
+          } catch (docxError) {
+            console.error(`Error parsing DOCX ${file.originalname}:`, docxError);
+            content = `Error parsing DOCX: ${docxError.message}`;
+          }
         } else {
           content = file.buffer.toString('utf8');
         }
+        
+        // Chunk the content for better indexing
+        const chunks = chunkContent(content, file.originalname);
         
         const processedFile = {
           id: `file_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
           name: file.originalname,
           size: file.size,
           type: file.mimetype,
-          content: content,
+          content: chunks,
           uploadedAt: new Date().toISOString()
         };
         
         processedFiles.push(processedFile);
         
-        // Index the content
-        contentIndex.push({
-          id: processedFile.id,
-          content: content,
-          metadata: {
-            source: 'local',
-            filename: file.originalname,
-            fileType: file.mimetype,
-            uploadedAt: processedFile.uploadedAt,
-            indexedAt: new Date().toISOString()
-          }
+        // Index each chunk separately for better retrieval
+        chunks.forEach((chunk, index) => {
+          contentIndex.push({
+            id: `${processedFile.id}_chunk_${index}`,
+            content: chunk.content,
+            metadata: {
+              source: 'local',
+              filename: file.originalname,
+              fileType: file.mimetype,
+              uploadedAt: processedFile.uploadedAt,
+              indexedAt: new Date().toISOString(),
+              chunkIndex: index,
+              totalChunks: chunks.length
+            }
+          });
         });
+        
+        logActivity('upload', 'local', `Processed ${file.originalname} into ${chunks.length} chunks`, 'success');
         
       } catch (error) {
         console.error(`Error processing file ${file.originalname}:`, error);
+        logActivity('upload', 'local', `Failed to process ${file.originalname}: ${error.message}`, 'error');
       }
     }
     
@@ -1059,6 +1168,44 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
     });
   }
 });
+
+// Helper function to chunk content
+function chunkContent(content, filename) {
+  // Split content into paragraphs and filter out empty ones
+  const paragraphs = content
+    .split(/\n\s*\n/)
+    .map(p => p.trim())
+    .filter(p => p.length > 50); // Only keep paragraphs with substantial content
+  
+  // If we have paragraphs, use them as chunks
+  if (paragraphs.length > 0) {
+    return paragraphs.map((paragraph, index) => ({
+      id: `${filename}_chunk_${index}`,
+      content: paragraph,
+      metadata: {
+        filename,
+        chunkIndex: index,
+        chunkType: 'paragraph'
+      }
+    }));
+  }
+  
+  // Fallback: split by sentences if no good paragraphs
+  const sentences = content
+    .split(/[.!?]+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 20);
+  
+  return sentences.map((sentence, index) => ({
+    id: `${filename}_chunk_${index}`,
+    content: sentence,
+    metadata: {
+      filename,
+      chunkIndex: index,
+      chunkType: 'sentence'
+    }
+  }));
+}
 
 // Test endpoint to populate with sample data
 app.post('/api/test/populate', async (req, res) => {

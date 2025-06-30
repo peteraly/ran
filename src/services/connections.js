@@ -77,36 +77,48 @@ export const handleOAuthCallback = async (provider, code, state) => {
 
 // File Processing
 export const processUploadedFiles = async (files) => {
-  const processedFiles = [];
+  try {
+    const formData = new FormData();
+    files.forEach(file => {
+      formData.append('files', file);
+    });
 
-  for (const file of files) {
-    try {
-      const content = await extractFileContent(file);
-      const chunks = await chunkContent(content, file.name);
-      
-      processedFiles.push({
-        id: generateFileId(),
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        content: chunks,
-        uploadedAt: new Date().toISOString()
-      });
-    } catch (error) {
-      console.error(`Error processing file ${file.name}:`, error);
+    const response = await fetch(`${API_BASE_URL}/api/upload`, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) {
+      throw new Error(`Upload failed: ${response.statusText}`);
     }
-  }
 
-  return processedFiles;
+    const result = await response.json();
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Upload failed');
+    }
+
+    return result.files;
+  } catch (error) {
+    console.error('Error uploading files:', error);
+    throw new Error(`Failed to upload files: ${error.message}`);
+  }
 };
 
 // Web Content Processing
 export const processWebContent = async (url) => {
   try {
-    // TODO: Implement web scraping with proper CORS handling
-    // This would typically be done server-side
     const response = await fetch(`${API_BASE_URL}/api/scrape?url=${encodeURIComponent(url)}`);
+    
+    if (!response.ok) {
+      throw new Error(`Web scraping failed: ${response.statusText}`);
+    }
+    
     const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Web scraping failed');
+    }
     
     return {
       id: generateFileId(),
