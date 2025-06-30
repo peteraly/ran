@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import SourcePanel from './SourcePanel';
 import sourceRegistry from '../data/source_registry.json';
-import { retrieveRelevantContent } from '../services/connections';
+import { retrieveRelevantContent, processRagQuery } from '../services/connections';
 
 function groupSourcesByType(sources) {
   return sources.reduce((acc, src) => {
@@ -176,65 +176,60 @@ export default function PromptDashboardApp({ onClose }) {
     
     setIsGenerating(true);
     setProcessingStage('scanning');
-    setRetrievedContent([]);
-    setSourceContributions({});
-    setLlmResponse(null);
     const startTime = Date.now();
-
+    
     try {
-      // Stage 1: Scan and retrieve relevant content from all sources
-      setProcessingStage('scanning');
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Visual delay
-      
+      // Get selected sources
       const usedSources = sources.filter(s => s.used).map(s => s.type);
+
+      // Stage 1: Retrieve relevant content
       const retrievalResult = await retrieveRelevantContent(prompt, usedSources);
       
-      if (retrievalResult.success && retrievalResult.results) {
-        setRetrievedContent(retrievalResult.results);
-        
-        // Calculate source contributions
-        const contributions = {};
-        retrievalResult.results.forEach(result => {
-          const source = result.source;
-          if (!contributions[source]) {
-            contributions[source] = {
-              count: 0,
-              totalScore: 0,
-              snippets: []
-            };
-          }
-          contributions[source].count++;
-          contributions[source].totalScore += result.score;
-          contributions[source].snippets.push({
-            title: result.title,
-            content: result.content,
-            score: result.score
-          });
-        });
-        setSourceContributions(contributions);
+      if (!retrievalResult.success) {
+        throw new Error(retrievalResult.error || 'Failed to retrieve content');
       }
 
-      // Stage 2: Process with LLM (simulated for now)
+      setRetrievedContent(retrievalResult.results || []);
+      
+      // Track source contributions
+      const contributions = {};
+      retrievalResult.results?.forEach(result => {
+        const source = result.source || 'unknown';
+        if (!contributions[source]) {
+          contributions[source] = {
+            count: 0,
+            totalScore: 0,
+            snippets: []
+          };
+        }
+        contributions[source].count++;
+        contributions[source].totalScore += result.score;
+        contributions[source].snippets.push({
+          title: result.title,
+          content: result.content,
+          score: result.score
+        });
+      });
+      setSourceContributions(contributions);
+
+      // Stage 2: Process with RAG
       setProcessingStage('processing');
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Visual delay
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Visual delay
       
-      // TODO: Replace with real LLM call
-      const mockLlmResponse = {
-        summary: generateMockSummary(prompt, retrievalResult.results || []),
-        insights: generateMockInsights(prompt, retrievalResult.results || []),
-        recommendations: generateMockRecommendations(prompt, retrievalResult.results || []),
-        confidence: 0.87,
-        sourcesUsed: retrievalResult.results?.length || 0
-      };
+      const ragResult = await processRagQuery(prompt, retrievalResult.results, usedSources);
       
-      setLlmResponse(mockLlmResponse);
+      if (!ragResult.success) {
+        throw new Error(ragResult.error || 'Failed to process with RAG');
+      }
+
+      setLlmResponse(ragResult);
 
       // Stage 3: Complete
       setProcessingStage('complete');
       const { chartType } = parsePrompt(prompt);
       setLastPrompt(prompt);
       setLastChartType(chartType);
-      setLastSummary(mockLlmResponse.summary);
+      setLastSummary(ragResult.summary);
       setProcessingTime(Date.now() - startTime);
 
     } catch (error) {
@@ -243,39 +238,6 @@ export default function PromptDashboardApp({ onClose }) {
     } finally {
       setIsGenerating(false);
     }
-  };
-
-  const generateMockSummary = (prompt, results) => {
-    if (prompt.toLowerCase().includes('stablecoin')) {
-      return [
-        '🇺🇸 U.S. Regulation: New Stablecoin Oversight Act introduced, requiring 100% reserves and real-time attestations.',
-        '💸 Tether Volatility: $1.2B net outflow, peg briefly lost, restored by arbitrage.',
-        '🇪🇺 EU MiCA Enforcement: MiCA now in effect, only USDC/EURC approved, Tether/DAI not approved.',
-        '🌐 Internal Risk: Cross-border corridors using non-compliant stablecoins may face operational halts.',
-      ];
-    }
-    return [
-      `Based on ${results.length} relevant sources, here are the key findings:`,
-      'Analysis completed with 87% confidence level',
-      'Sources scanned: ' + Object.keys(sourceContributions).join(', '),
-      'Processing time: ' + (processingTime / 1000).toFixed(1) + ' seconds'
-    ];
-  };
-
-  const generateMockInsights = (prompt, results) => {
-    return [
-      'Market volatility increased by 23% in the last quarter',
-      'Regulatory uncertainty is the primary concern for 67% of respondents',
-      'Technology adoption is accelerating across all sectors'
-    ];
-  };
-
-  const generateMockRecommendations = (prompt, results) => {
-    return [
-      'Monitor regulatory developments closely',
-      'Diversify stablecoin holdings across compliant options',
-      'Implement real-time risk monitoring systems'
-    ];
   };
 
   const ProcessingIndicator = () => {

@@ -177,6 +177,27 @@ export const retrieveRelevantContent = async (query, sources = []) => {
   }
 };
 
+// RAG Processing
+export const processRagQuery = async (query, context, sources = []) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/rag/process`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query,
+        context,
+        sources
+      })
+    });
+
+    return await response.json();
+  } catch (error) {
+    throw new Error(`Failed to process RAG query: ${error.message}`);
+  }
+};
+
 // Utility Functions
 const generateState = () => {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
