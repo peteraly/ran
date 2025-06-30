@@ -1043,6 +1043,19 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
         }
         // Index chunks in Pinecone
         await indexChunksWithPinecone(chunks, { source: 'local', filename: file.originalname });
+        // Add summary record to contentIndex for dashboard visibility
+        contentIndex.push({
+          id: `${file.originalname}-${Date.now()}`,
+          content: content.slice(0, 5000), // Store up to 5000 chars as preview
+          metadata: {
+            source: 'local',
+            filename: file.originalname,
+            type: file.mimetype,
+            size: file.size,
+            uploadedAt: new Date().toISOString(),
+            chunkCount: chunks.length
+          }
+        });
         processedFiles.push({
           name: file.originalname,
           size: file.size,
