@@ -1,7 +1,7 @@
 // Connection service for handling real OAuth flows and file processing
 
 // API Configuration
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://ran-k8ou.onrender.com';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://ran-1.onrender.com';
 
 // OAuth Configuration
 const OAUTH_CONFIG = {
