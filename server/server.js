@@ -1045,6 +1045,18 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
     const processedFiles = [];
     for (const file of req.files) {
       try {
+        // Fix filename encoding issues
+        let safeFilename = file.originalname;
+        console.log('Original filename:', file.originalname);
+        try {
+          safeFilename = Buffer.from(safeFilename, 'latin1').toString('utf8');
+          console.log('Decoded filename:', safeFilename);
+        } catch (e) {
+          console.log('Decoding failed:', e.message);
+        }
+        safeFilename = safeFilename.normalize('NFC');
+        console.log('Final safe filename:', safeFilename);
+        
         let content = '';
         if (file.mimetype === 'application/pdf') {
           // PDF parsing
@@ -1070,20 +1082,20 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
         while (i < content.length) {
           const chunkText = content.slice(i, i + chunkSize);
           chunks.push({
-            id: `${file.originalname}-chunk-${i}`,
+            id: `${safeFilename}-chunk-${i}`,
             content: chunkText,
           });
           i += chunkSize - overlap;
         }
         // Index chunks in Pinecone
-        await indexChunksWithPinecone(chunks, { source: 'local', filename: file.originalname });
+        await indexChunksWithPinecone(chunks, { source: 'local', filename: safeFilename });
         // Add summary record to contentIndex for dashboard visibility
         contentIndex.push({
-          id: `${file.originalname}-${Date.now()}`,
+          id: `${safeFilename}-${Date.now()}`,
           content: content.slice(0, 5000), // Store up to 5000 chars as preview
           metadata: {
             source: 'local',
-            filename: file.originalname,
+            filename: safeFilename,
             type: file.mimetype,
             size: file.size,
             uploadedAt: new Date().toISOString(),
@@ -1091,7 +1103,7 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
           }
         });
         processedFiles.push({
-          name: file.originalname,
+          name: safeFilename,
           size: file.size,
           content: chunks,
           type: file.mimetype,
