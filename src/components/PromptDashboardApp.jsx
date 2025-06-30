@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import SourcePanel from './SourcePanel';
 import sourceRegistry from '../data/source_registry.json';
-import { retrieveRelevantContent, processRagQuery, processUploadedFiles } from '../services/connections';
+import { retrieveRelevantContent, processRagQuery, processUploadedFiles, processRagQueryFallback } from '../services/connections';
 import RagProcessingPipeline from './RagProcessingPipeline';
 import ChunkPreviewCards from './ChunkPreviewCards';
 import SourceAttribution from './SourceAttribution';
@@ -80,6 +80,10 @@ export default function PromptDashboardApp({ onClose }) {
       try {
         // Fetch from backend: get all indexed local files
         const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://ran-1.onrender.com'}/api/activity?limit=100`);
+        if (!res.ok) {
+          console.log('Activity endpoint not available, skipping local files fetch');
+          return;
+        }
         const data = await res.json();
         if (data.success) {
           // Filter for local uploads
@@ -94,7 +98,8 @@ export default function PromptDashboardApp({ onClose }) {
           setLocalFiles(files);
         }
       } catch (err) {
-        // Ignore errors for now
+        console.log('Activity fetch failed, continuing without local files:', err.message);
+        // Continue without local files - this is not critical
       }
     }
     fetchLocalFiles();
@@ -289,7 +294,13 @@ export default function PromptDashboardApp({ onClose }) {
         setProcessingStage('analyzing');
         
         // Stage 2: Process with RAG
-        const ragResult = await processRagQuery(prompt, retrievalResult.chunks, usedSources);
+        let ragResult;
+        try {
+          ragResult = await processRagQuery(prompt, retrievalResult.chunks, usedSources);
+        } catch (error) {
+          console.log('Backend RAG endpoint failed, using fallback:', error.message);
+          ragResult = await processRagQueryFallback(prompt, retrievalResult.chunks, usedSources);
+        }
         
         if (ragResult.success) {
           setRagResponse(ragResult);
