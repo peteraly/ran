@@ -1,12 +1,15 @@
 services:
   - type: web
-    name: deliverable-dashboard-backend
+    name: ran-backend
     env: node
     plan: free
-    buildCommand: cd server && npm install
-    startCommand: cd server && npm start
+    buildCommand: npm install
+    startCommand: npm start
+    rootDir: server
     envVars:
+      - key: PORT
+        value: 10000
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 10000 
+      - key: FRONTEND_URL
+        value: https://ran-8lzeudska-peteralys-projects.vercel.app 
