@@ -468,9 +468,43 @@ app.post('/api/retrieve', async (req, res) => {
   try {
     const { query, sources, limit } = req.body;
     const topK = limit || 5;
-    const relevantChunks = await retrieveRelevantChunksFromPinecone(query, topK);
-    res.json({ success: true, chunks: relevantChunks });
+    
+    // Get all relevant chunks from Pinecone
+    const allChunks = await retrieveRelevantChunksFromPinecone(query, topK * 2); // Get more to filter
+    
+    // Filter chunks based on requested sources
+    let filteredChunks = allChunks;
+    if (sources && sources.length > 0) {
+      filteredChunks = allChunks.filter(chunk => {
+        const chunkSource = chunk.metadata?.source;
+        return sources.includes(chunkSource);
+      });
+    }
+    
+    // If no chunks found for requested sources, but we have web search enabled
+    if (filteredChunks.length === 0 && sources && sources.includes('web')) {
+      // For web search, we could implement real-time web scraping here
+      // For now, return a message indicating web search is needed
+      return res.json({
+        success: true,
+        chunks: [],
+        message: 'Web search enabled but no indexed web content found. Consider adding web sources first.',
+        needsWebSearch: true
+      });
+    }
+    
+    // Limit to requested number of chunks
+    const finalChunks = filteredChunks.slice(0, topK);
+    
+    res.json({ 
+      success: true, 
+      chunks: finalChunks,
+      totalFound: allChunks.length,
+      filteredCount: filteredChunks.length,
+      returnedCount: finalChunks.length
+    });
   } catch (error) {
+    console.error('Content retrieval error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1316,6 +1350,121 @@ async function retrieveRelevantChunksFromPinecone(query, topK = 5) {
     metadata: match.metadata,
   }));
 }
+
+// Real-time web search endpoint for Internet Search mode
+app.post('/api/web/search', async (req, res) => {
+  try {
+    const { query, limit = 5 } = req.body;
+    
+    if (!query) {
+      return res.status(400).json({
+        success: false,
+        error: 'Query parameter is required'
+      });
+    }
+    
+    // For now, we'll use a simple web scraping approach
+    // In production, you'd want to integrate with a proper search API (Google, Bing, etc.)
+    
+    // Search for relevant URLs (this is a simplified approach)
+    const searchUrls = [
+      `https://www.google.com/search?q=${encodeURIComponent(query)}`,
+      `https://en.wikipedia.org/wiki/${encodeURIComponent(query.replace(/\s+/g, '_'))}`,
+      `https://www.investopedia.com/search?q=${encodeURIComponent(query)}`
+    ];
+    
+    const webResults = [];
+    
+    for (const url of searchUrls.slice(0, 2)) { // Limit to 2 URLs for demo
+      try {
+        const response = await axios.get(url, {
+          timeout: 5000,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          }
+        });
+        
+        const $ = cheerio.load(response.data);
+        
+        // Extract relevant content
+        const title = $('title').text().trim() || $('h1').first().text().trim();
+        let content = '';
+        
+        // Try to find main content
+        const mainSelectors = ['main', 'article', '.content', '.main-content', '#content'];
+        for (const selector of mainSelectors) {
+          const element = $(selector);
+          if (element.length > 0) {
+            content = element.text().trim();
+            break;
+          }
+        }
+        
+        if (!content) {
+          content = $('body').text().trim();
+        }
+        
+        // Clean and limit content
+        content = content
+          .replace(/\s+/g, ' ')
+          .replace(/\n\s*\n/g, '\n\n')
+          .trim()
+          .substring(0, 2000);
+        
+        if (content.length > 100) {
+          webResults.push({
+            id: `web_search_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+            content: content,
+            metadata: {
+              source: 'web',
+              url: url,
+              title: title,
+              searchQuery: query,
+              scrapedAt: new Date().toISOString(),
+              indexedAt: new Date().toISOString()
+            },
+            score: 0.8 // Default relevance score for web search
+          });
+        }
+      } catch (scrapeError) {
+        console.log(`Failed to scrape ${url}:`, scrapeError.message);
+        // Continue with other URLs
+      }
+    }
+    
+    // If no web results found, return a fallback response
+    if (webResults.length === 0) {
+      return res.json({
+        success: true,
+        chunks: [{
+          id: `web_fallback_${Date.now()}`,
+          content: `No real-time web results found for "${query}". Consider adding specific web sources or checking your search terms.`,
+          metadata: {
+            source: 'web',
+            title: 'Web Search Fallback',
+            searchQuery: query,
+            scrapedAt: new Date().toISOString()
+          },
+          score: 0.5
+        }],
+        message: 'Web search completed with limited results'
+      });
+    }
+    
+    res.json({
+      success: true,
+      chunks: webResults.slice(0, limit),
+      message: `Found ${webResults.length} web results for "${query}"`
+    });
+    
+  } catch (error) {
+    console.error('Web search error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to perform web search'
+    });
+  }
+});
 
 // Error handling middleware
 app.use((error, req, res, next) => {
