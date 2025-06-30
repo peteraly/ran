@@ -1,7 +1,7 @@
 // Connection service for handling real OAuth flows and file processing
 
 // API Configuration
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://ran-k8ou.onrender.com';
 
 // OAuth Configuration
 const OAUTH_CONFIG = {
@@ -371,4 +371,4 @@ export const syncApiContent = async (type, config) => {
   } catch (error) {
     throw new Error(`Failed to sync external API content: ${error.message}`);
   }
-}; 
+};
