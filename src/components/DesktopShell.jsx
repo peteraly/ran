@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Terminal, Settings, Mail, Database, Slack as SlackIcon, Book, Globe2, Command } from 'lucide-react';
+import { Terminal, Settings, Mail, Database, Slack as SlackIcon, Book, Globe2, Command, Activity, TestTube } from 'lucide-react';
 import PromptDashboardApp from './PromptDashboardApp';
 import AddSourceModal from './AddSourceModal';
 import SourceManager from './SourceManager';
+import SourceActivityDashboard from './SourceActivityDashboard';
+import RagTestPanel from './RagTestPanel';
 import { initiateOAuth, processUploadedFiles, processWebContent, indexContent } from '../services/connections';
 
 // Start with only essential tabs - no demo data
 const BASE_APPS = [
   { key: 'dashboard', name: 'Prompt Dashboard', icon: <Terminal className="h-5 w-5" />, shortcut: '⌘+1' },
   { key: 'sources', name: 'Data Sources', icon: <Settings className="h-5 w-5" />, shortcut: '⌘+2' },
+  { key: 'activity', name: 'Source Activity', icon: <Activity className="h-5 w-5" />, shortcut: '⌘+3' },
+  { key: 'test', name: 'RAG Test', icon: <TestTube className="h-5 w-5" />, shortcut: '⌘+4' },
 ];
 
 const DEMO_SOURCE_ICONS = {
@@ -267,6 +271,8 @@ export default function DesktopShell() {
             <h1 className="text-2xl font-semibold text-gray-800 tracking-tight">
               {activeTab === 'dashboard' ? 'Prompt Dashboard' : 
                activeTab === 'sources' ? 'Data Sources' : 
+               activeTab === 'activity' ? 'Source Activity' :
+               activeTab === 'test' ? 'RAG Test' :
                extraTabs.find(tab => tab.key === activeTab)?.name || 'Application'}
             </h1>
             <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
@@ -276,6 +282,8 @@ export default function DesktopShell() {
             <div className="flex-1 flex flex-col">
               {activeTab === 'dashboard' && <PromptDashboardApp />}
               {activeTab === 'sources' && <SourceManager />}
+              {activeTab === 'activity' && <SourceActivityDashboard />}
+              {activeTab === 'test' && <RagTestPanel />}
               {/* Render extra tabs */}
               {extraTabs.map(tab => (
                 activeTab === tab.key ? <React.Fragment key={tab.key}>{tab.panel}</React.Fragment> : null

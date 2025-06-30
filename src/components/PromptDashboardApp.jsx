@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Terminal, Command, Sparkles, FileText, BarChart3, Table } from 'lucide-react';
+import { Terminal, Command, Sparkles, FileText, BarChart3, Table, Search, Database, Globe2, Mail, CheckCircle, Clock, AlertCircle, Brain, Zap } from 'lucide-react';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import SourcePanel from './SourcePanel';
 import sourceRegistry from '../data/source_registry.json';
+import { retrieveRelevantContent } from '../services/connections';
 
 function groupSourcesByType(sources) {
   return sources.reduce((acc, src) => {
@@ -31,6 +32,13 @@ export default function PromptDashboardApp({ onClose }) {
   const [showCommandBar, setShowCommandBar] = useState(false);
   const [selectedDeliverableType, setSelectedDeliverableType] = useState(null);
   const commandBarRef = useRef(null);
+
+  // RAG Processing States
+  const [processingStage, setProcessingStage] = useState(null);
+  const [retrievedContent, setRetrievedContent] = useState([]);
+  const [sourceContributions, setSourceContributions] = useState({});
+  const [llmResponse, setLlmResponse] = useState(null);
+  const [processingTime, setProcessingTime] = useState(0);
 
   useEffect(() => {
     // Deep clone to avoid mutating the imported JSON
@@ -163,20 +171,289 @@ export default function PromptDashboardApp({ onClose }) {
     );
   }
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
+    if (!prompt.trim()) return;
+    
     setIsGenerating(true);
-    setTimeout(() => {
+    setProcessingStage('scanning');
+    setRetrievedContent([]);
+    setSourceContributions({});
+    setLlmResponse(null);
+    const startTime = Date.now();
+
+    try {
+      // Stage 1: Scan and retrieve relevant content from all sources
+      setProcessingStage('scanning');
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Visual delay
+      
+      const usedSources = sources.filter(s => s.used).map(s => s.type);
+      const retrievalResult = await retrieveRelevantContent(prompt, usedSources);
+      
+      if (retrievalResult.success && retrievalResult.results) {
+        setRetrievedContent(retrievalResult.results);
+        
+        // Calculate source contributions
+        const contributions = {};
+        retrievalResult.results.forEach(result => {
+          const source = result.source;
+          if (!contributions[source]) {
+            contributions[source] = {
+              count: 0,
+              totalScore: 0,
+              snippets: []
+            };
+          }
+          contributions[source].count++;
+          contributions[source].totalScore += result.score;
+          contributions[source].snippets.push({
+            title: result.title,
+            content: result.content,
+            score: result.score
+          });
+        });
+        setSourceContributions(contributions);
+      }
+
+      // Stage 2: Process with LLM (simulated for now)
+      setProcessingStage('processing');
+      await new Promise(resolve => setTimeout(resolve, 1500)); // Visual delay
+      
+      // TODO: Replace with real LLM call
+      const mockLlmResponse = {
+        summary: generateMockSummary(prompt, retrievalResult.results || []),
+        insights: generateMockInsights(prompt, retrievalResult.results || []),
+        recommendations: generateMockRecommendations(prompt, retrievalResult.results || []),
+        confidence: 0.87,
+        sourcesUsed: retrievalResult.results?.length || 0
+      };
+      
+      setLlmResponse(mockLlmResponse);
+
+      // Stage 3: Complete
+      setProcessingStage('complete');
       const { chartType } = parsePrompt(prompt);
-      const summary = getSummary(prompt);
       setLastPrompt(prompt);
       setLastChartType(chartType);
-      setLastSummary(summary);
+      setLastSummary(mockLlmResponse.summary);
+      setProcessingTime(Date.now() - startTime);
+
+    } catch (error) {
+      console.error('RAG processing error:', error);
+      setProcessingStage('error');
+    } finally {
       setIsGenerating(false);
-    }, 800);
+    }
+  };
+
+  const generateMockSummary = (prompt, results) => {
+    if (prompt.toLowerCase().includes('stablecoin')) {
+      return [
+        '🇺🇸 U.S. Regulation: New Stablecoin Oversight Act introduced, requiring 100% reserves and real-time attestations.',
+        '💸 Tether Volatility: $1.2B net outflow, peg briefly lost, restored by arbitrage.',
+        '🇪🇺 EU MiCA Enforcement: MiCA now in effect, only USDC/EURC approved, Tether/DAI not approved.',
+        '🌐 Internal Risk: Cross-border corridors using non-compliant stablecoins may face operational halts.',
+      ];
+    }
+    return [
+      `Based on ${results.length} relevant sources, here are the key findings:`,
+      'Analysis completed with 87% confidence level',
+      'Sources scanned: ' + Object.keys(sourceContributions).join(', '),
+      'Processing time: ' + (processingTime / 1000).toFixed(1) + ' seconds'
+    ];
+  };
+
+  const generateMockInsights = (prompt, results) => {
+    return [
+      'Market volatility increased by 23% in the last quarter',
+      'Regulatory uncertainty is the primary concern for 67% of respondents',
+      'Technology adoption is accelerating across all sectors'
+    ];
+  };
+
+  const generateMockRecommendations = (prompt, results) => {
+    return [
+      'Monitor regulatory developments closely',
+      'Diversify stablecoin holdings across compliant options',
+      'Implement real-time risk monitoring systems'
+    ];
+  };
+
+  const ProcessingIndicator = () => {
+    if (!isGenerating) return null;
+
+    const stages = {
+      scanning: { icon: Search, text: 'Scanning sources...', color: 'text-blue-500' },
+      processing: { icon: Brain, text: 'Processing with AI...', color: 'text-purple-500' },
+      complete: { icon: CheckCircle, text: 'Complete!', color: 'text-green-500' },
+      error: { icon: AlertCircle, text: 'Error occurred', color: 'text-red-500' }
+    };
+
+    const currentStage = stages[processingStage] || stages.scanning;
+    const IconComponent = currentStage.icon;
+
+    return (
+      <div className="fixed top-4 right-4 bg-white border border-gray-200 rounded-xl shadow-lg p-4 z-50 min-w-64">
+        <div className="flex items-center gap-3 mb-3">
+          <IconComponent className={`h-5 w-5 ${currentStage.color}`} />
+          <span className="font-medium text-gray-900">{currentStage.text}</span>
+        </div>
+        
+        {processingStage === 'scanning' && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600">Sources scanned:</span>
+              <span className="font-medium">{Object.keys(sourceContributions).length}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600">Content retrieved:</span>
+              <span className="font-medium">{retrievedContent.length} items</span>
+            </div>
+          </div>
+        )}
+        
+        {processingStage === 'processing' && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600">Context assembled:</span>
+              <span className="font-medium">{retrievedContent.length} chunks</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600">AI processing:</span>
+              <span className="font-medium">In progress...</span>
+            </div>
+          </div>
+        )}
+        
+        {processingStage === 'complete' && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600">Confidence:</span>
+              <span className="font-medium text-green-600">87%</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600">Processing time:</span>
+              <span className="font-medium">{(processingTime / 1000).toFixed(1)}s</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const SourceContributionsPanel = () => {
+    if (!retrievedContent.length) return null;
+
+    return (
+      <div className="bg-white/80 border border-gray-100 rounded-2xl p-6 shadow-sm mb-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Database className="h-5 w-5 text-blue-500" />
+          <h3 className="text-lg font-semibold text-gray-900">Source Contributions</h3>
+          <div className="ml-auto flex items-center gap-2 text-sm text-gray-500">
+            <span>{retrievedContent.length} items retrieved</span>
+            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+          </div>
+        </div>
+        
+        <div className="space-y-4">
+          {Object.entries(sourceContributions).map(([source, data]) => (
+            <div key={source} className="bg-gray-50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-blue-400"></div>
+                  <span className="font-medium text-gray-900 capitalize">{source}</span>
+                </div>
+                <div className="flex items-center gap-4 text-sm text-gray-600">
+                  <span>{data.count} items</span>
+                  <span>{(data.totalScore / data.count).toFixed(2)} avg score</span>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                {data.snippets.slice(0, 2).map((snippet, idx) => (
+                  <div key={idx} className="bg-white rounded p-3 border-l-4 border-blue-400">
+                    <div className="font-medium text-sm text-gray-900 mb-1">{snippet.title}</div>
+                    <div className="text-xs text-gray-600 line-clamp-2">{snippet.content}</div>
+                    <div className="text-xs text-gray-500 mt-1">Relevance: {(snippet.score * 100).toFixed(0)}%</div>
+                  </div>
+                ))}
+                {data.snippets.length > 2 && (
+                  <div className="text-xs text-gray-500 text-center">
+                    +{data.snippets.length - 2} more items
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const LlmResponsePanel = () => {
+    if (!llmResponse) return null;
+
+    return (
+      <div className="bg-white/80 border border-gray-100 rounded-2xl p-6 shadow-sm mb-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Brain className="h-5 w-5 text-purple-500" />
+          <h3 className="text-lg font-semibold text-gray-900">AI Analysis</h3>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-sm text-gray-600">Confidence:</span>
+            <span className="text-sm font-medium text-green-600">{(llmResponse.confidence * 100).toFixed(0)}%</span>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-blue-50 rounded-lg p-4">
+            <h4 className="font-medium text-blue-900 mb-2">Key Insights</h4>
+            <ul className="space-y-1 text-sm text-blue-800">
+              {llmResponse.insights?.map((insight, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <span className="text-blue-500 mt-1">•</span>
+                  <span>{insight}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          
+          <div className="bg-green-50 rounded-lg p-4">
+            <h4 className="font-medium text-green-900 mb-2">Recommendations</h4>
+            <ul className="space-y-1 text-sm text-green-800">
+              {llmResponse.recommendations?.map((rec, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <span className="text-green-500 mt-1">•</span>
+                  <span>{rec}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          
+          <div className="bg-purple-50 rounded-lg p-4">
+            <h4 className="font-medium text-purple-900 mb-2">Processing Stats</h4>
+            <div className="space-y-2 text-sm text-purple-800">
+              <div className="flex justify-between">
+                <span>Sources used:</span>
+                <span className="font-medium">{llmResponse.sourcesUsed}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Processing time:</span>
+                <span className="font-medium">{(processingTime / 1000).toFixed(1)}s</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Context chunks:</span>
+                <span className="font-medium">{retrievedContent.length}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
     <div className="w-full max-w-3xl mx-auto p-8">
+      <ProcessingIndicator />
+      
       <div className="bg-gradient-to-br from-white via-gray-50 to-blue-50 rounded-3xl shadow-2xl border border-gray-100 overflow-hidden">
         {/* Title bar */}
         <div className="flex items-center justify-between px-8 py-5 bg-white/80 border-b border-gray-200 rounded-t-3xl" data-drag-handle>
@@ -309,12 +586,18 @@ export default function PromptDashboardApp({ onClose }) {
               ))}
             </div>
           </div>
+
+          {/* RAG Processing Results */}
+          <SourceContributionsPanel />
+          <LlmResponsePanel />
+
           {/* Deliverable output */}
           {lastPrompt && (
             <div className="bg-white border border-gray-200 rounded-2xl shadow-lg p-8 hover:shadow-2xl transition-shadow">
               <div className="mb-3 text-xs text-gray-500 flex flex-wrap gap-4">
                 <span>Deliverable Type: <span className="font-semibold text-gray-700">{deliverableType}</span></span>
                 <span>Prompt: <span className="font-semibold text-gray-700">{lastPrompt}</span></span>
+                <span>Processing Time: <span className="font-semibold text-gray-700">{(processingTime / 1000).toFixed(1)}s</span></span>
               </div>
               <div className="mb-3 text-xs text-gray-500">Sources Used:</div>
               <ul className="mb-3 text-xs list-disc pl-5">
@@ -330,7 +613,7 @@ export default function PromptDashboardApp({ onClose }) {
                 ))}
               </ul>
               <div className="mb-3">
-                <span className="font-semibold text-gray-700">Summary (Expanded):</span>
+                <span className="font-semibold text-gray-700">Summary (RAG Generated):</span>
                 <ul className="list-disc pl-5 mt-1">
                   {lastSummary.map((s, i) => <li key={i} className="text-xs text-gray-700">{s}</li>)}
                 </ul>
