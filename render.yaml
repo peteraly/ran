@@ -12,4 +12,4 @@ services:
       - key: NODE_ENV
         value: production
       - key: FRONTEND_URL
-        value: https://ran-9s53094xu-peteralys-projects.vercel.app 
+        value: https://ran-d4twkhmp5-peteralys-projects.vercel.app 

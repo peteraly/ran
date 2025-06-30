@@ -3,7 +3,7 @@
 ## 🚀 Current Deployment Status
 
 ### Frontend (Vercel) - ✅ DEPLOYED
-- **Live URL**: https://ran-9s53094xu-peteralys-projects.vercel.app
+- **Live URL**: https://ran-d4twkhmp5-peteralys-projects.vercel.app
 - **Status**: Successfully deployed and running
 - **Last Deployed**: June 30, 2025
 
@@ -38,7 +38,7 @@
 ```env
 NODE_ENV=production
 PORT=10000
-FRONTEND_URL=https://ran-9s53094xu-peteralys-projects.vercel.app
+FRONTEND_URL=https://ran-d4twkhmp5-peteralys-projects.vercel.app
 PINECONE_API_KEY=your_pinecone_api_key
 PINECONE_INDEX=rag-index
 OPENAI_API_KEY=your_openai_api_key
@@ -61,7 +61,7 @@ After deploying the backend:
 ## Testing Deployment
 
 ### 1. Frontend Test
-- Visit: https://ran-9s53094xu-peteralys-projects.vercel.app
+- Visit: https://ran-d4twkhmp5-peteralys-projects.vercel.app
 - Should load the RAG dashboard interface
 
 ### 2. Backend Health Check
@@ -113,6 +113,6 @@ git push origin main  # Triggers automatic deployment if using Blueprint
 ```
 
 ## Current URLs
-- **Frontend**: https://ran-9s53094xu-peteralys-projects.vercel.app
+- **Frontend**: https://ran-d4twkhmp5-peteralys-projects.vercel.app
 - **Backend**: Will be available after Render.com deployment
 - **Repository**: https://github.com/peteraly/ran.git 
