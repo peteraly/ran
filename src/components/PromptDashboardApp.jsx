@@ -49,6 +49,9 @@ export default function PromptDashboardApp({ onClose }) {
   const [confidence, setConfidence] = useState(0);
   const [sourceBreakdown, setSourceBreakdown] = useState([]);
 
+  const [internetSearch, setInternetSearch] = useState(false);
+  const [showSourceWarning, setShowSourceWarning] = useState(false);
+
   useEffect(() => {
     // Deep clone to avoid mutating the imported JSON
     setSources(JSON.parse(JSON.stringify(sourceRegistry)));
@@ -243,7 +246,11 @@ export default function PromptDashboardApp({ onClose }) {
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
-    
+    if (!internetSearch && sources.filter(s => s.used).length === 0) {
+      setShowSourceWarning(true);
+      return;
+    }
+    setShowSourceWarning(false);
     setIsGenerating(true);
     setProcessingTime(0);
     setRetrievedChunks([]);
@@ -287,7 +294,7 @@ export default function PromptDashboardApp({ onClose }) {
     
     try {
       // Get selected sources
-      const usedSources = sources.filter(s => s.used).map(s => s.type);
+      const usedSources = internetSearch ? ['web'] : sources.filter(s => s.used).map(s => s.type);
       
       // Stage 1: Retrieve relevant content
       setProcessingStages(prev => prev.map(stage => 
@@ -583,9 +590,17 @@ export default function PromptDashboardApp({ onClose }) {
           <div className="w-80 border-r border-gray-200 overflow-y-auto">
             <SourcePanel
               sources={sources}
-              onSourceToggle={handleToggleUsed}
+              onSourceToggle={internetSearch ? undefined : handleToggleUsed}
               onAddSource={() => {}}
             />
+            <div className="p-4">
+              <button
+                className={`w-full py-2 px-4 rounded-lg border ${internetSearch ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border-blue-600'} mt-4`}
+                onClick={() => setInternetSearch(v => !v)}
+              >
+                {internetSearch ? 'Internet Search Enabled' : 'Use Internet Search Only'}
+              </button>
+            </div>
           </div>
 
           {/* Right Panel - Main Content */}
@@ -604,7 +619,11 @@ export default function PromptDashboardApp({ onClose }) {
                     className="min-h-[100px]"
                   />
                 </div>
-                
+                {showSourceWarning && (
+                  <div className="text-red-600 text-sm font-medium mb-2">
+                    Please select at least one source or enable Internet Search.
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <select
@@ -617,12 +636,10 @@ export default function PromptDashboardApp({ onClose }) {
                       <option value="table">Table</option>
                       <option value="summary">Summary</option>
                     </select>
-                    
                     <div className="text-sm text-gray-500">
-                      {sources.filter(s => s.used).length} sources selected
+                      {internetSearch ? 'Internet Search Only' : `${sources.filter(s => s.used).length} sources selected`}
                     </div>
                   </div>
-                  
                   <Button
                     onClick={handleGenerate}
                     disabled={isGenerating || !prompt.trim()}

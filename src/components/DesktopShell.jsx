@@ -132,7 +132,7 @@ export default function DesktopShell() {
                 <div key={index} className="p-3 bg-gray-50 rounded-lg">
                   <div className="font-medium">{file.name}</div>
                   <div className="text-sm text-gray-600">
-                    {(file.size / 1024).toFixed(1)} KB • {Array.isArray(file.content) ? file.content.length : 1} chunks indexed
+                    {(file.size / 1024).toFixed(1)} KB • {file.metadata?.chunkCount || (Array.isArray(file.content) ? file.content.length : 0)} chunks indexed
                   </div>
                 </div>
               ))}

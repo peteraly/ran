@@ -1087,19 +1087,21 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
           });
           i += chunkSize - overlap;
         }
-        // Index chunks in Pinecone
+        // Index chunks in Pinecone (optional - continue even if it fails)
         console.log(`Attempting to index ${chunks.length} chunks for file: ${safeFilename}`);
+        let pineconeSuccess = false;
         try {
           await indexChunksWithPinecone(chunks, { source: 'local', filename: safeFilename });
           console.log(`Successfully indexed ${chunks.length} chunks in Pinecone`);
+          pineconeSuccess = true;
         } catch (pineconeError) {
           console.error('Pinecone indexing failed:', pineconeError);
-          // Continue processing even if Pinecone fails
+          console.log('Continuing without Pinecone indexing...');
         }
         
-        // Add summary record to contentIndex for dashboard visibility
+        // Add summary record to contentIndex for dashboard visibility (always do this)
         console.log('Adding file to contentIndex for dashboard visibility');
-        contentIndex.push({
+        const fileRecord = {
           id: `${safeFilename}-${Date.now()}`,
           content: content.slice(0, 5000), // Store up to 5000 chars as preview
           metadata: {
@@ -1108,9 +1110,12 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
             type: file.mimetype,
             size: file.size,
             uploadedAt: new Date().toISOString(),
-            chunkCount: chunks.length
+            chunkCount: chunks.length,
+            pineconeIndexed: pineconeSuccess
           }
-        });
+        };
+        contentIndex.push(fileRecord);
+        console.log('File added to contentIndex successfully');
         processedFiles.push({
           name: safeFilename,
           size: file.size,

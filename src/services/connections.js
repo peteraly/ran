@@ -171,7 +171,36 @@ export const retrieveRelevantContent = async (query, sources = []) => {
       })
     });
 
-    return await response.json();
+    const result = await response.json();
+    
+    // If no chunks found and web search is enabled, try real-time web search
+    if (result.success && result.chunks.length === 0 && sources.includes('web') && result.needsWebSearch) {
+      console.log('No indexed web content found, attempting real-time web search...');
+      
+      const webSearchResponse = await fetch(`${API_BASE_URL}/api/web/search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query,
+          limit: 10
+        })
+      });
+      
+      const webResult = await webSearchResponse.json();
+      
+      if (webResult.success) {
+        return {
+          success: true,
+          chunks: webResult.chunks,
+          message: webResult.message,
+          source: 'web_search'
+        };
+      }
+    }
+    
+    return result;
   } catch (error) {
     throw new Error(`Failed to retrieve content: ${error.message}`);
   }
