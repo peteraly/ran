@@ -16,7 +16,6 @@
     "postcss": "^8.4.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-scripts": "^0.0.0",
     "tailwind-merge": "^1.14.0",
     "tailwindcss": "^3.3.0",
     "tailwindcss-animate": "^1.0.7",
@@ -46,5 +45,13 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "@pmmmwh/react-refresh-webpack-plugin": "^0.6.1",
+    "babel-loader": "^10.0.0",
+    "html-webpack-plugin": "^5.6.3",
+    "react-scripts": "^5.0.1",
+    "source-map-loader": "^5.0.0",
+    "webpack-dev-server": "^5.2.2"
   }
 }
