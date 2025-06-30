@@ -33,7 +33,8 @@ app.use(cors({
       'https://ran-bqtmmstz7-peteralys-projects.vercel.app',
       'https://ran-nhv6pa4rv-peteralys-projects.vercel.app',
       'https://ran-hbc37h4cy-peteralys-projects.vercel.app',
-      'https://ran-7mmw0v4hb-peteralys-projects.vercel.app'
+      'https://ran-7mmw0v4hb-peteralys-projects.vercel.app',
+      'https://ran-5c9a2mcqz-peteralys-projects.vercel.app'
     ];
     
     // Allow any Vercel domain
