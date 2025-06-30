@@ -103,11 +103,17 @@ export default function PromptDashboardApp({ onClose }) {
   const grouped = groupSourcesByType(sources);
 
   const handleToggleUsed = (type, idx) => {
-    setSources(prev => prev.map((src, i) =>
-      src.type === type && grouped[type].indexOf(src) === idx
-        ? { ...src, used: !src.used }
-        : src
-    ));
+    setSources(prev => {
+      const grouped = groupSourcesByType(prev);
+      const typeSources = grouped[type] || [];
+      const sourceToToggle = typeSources[idx];
+      
+      if (!sourceToToggle) return prev;
+      
+      return prev.map(src => 
+        src === sourceToToggle ? { ...src, used: !src.used } : src
+      );
+    });
   };
 
   function parsePrompt(prompt) {
