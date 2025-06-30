@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Terminal, Command, Sparkles, FileText, BarChart3, Table, Search, Database, Globe2, Mail, CheckCircle, Clock, AlertCircle, Brain, Zap } from 'lucide-react';
+import { Terminal, Command, Sparkles, FileText, BarChart3, Table, Search, Database, Globe2, Mail, CheckCircle, Clock, AlertCircle, Brain, Zap, X } from 'lucide-react';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import SourcePanel from './SourcePanel';
