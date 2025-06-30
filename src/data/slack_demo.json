@@ -1,0 +1,29 @@
+[
+  {
+    "type": "slack",
+    "user": "PMO",
+    "msg": "Reminder: review stablecoin risk memo before EOD.",
+    "timestamp": "10:15",
+    "channel": "risk-alerts",
+    "tags": ["reminder", "risk", "stablecoin"],
+    "used": false
+  },
+  {
+    "type": "slack",
+    "user": "Legal",
+    "msg": "MiCA compliance checklist shared in #compliance.",
+    "timestamp": "10:30",
+    "channel": "compliance",
+    "tags": ["compliance", "MiCA"],
+    "used": false
+  },
+  {
+    "type": "slack",
+    "user": "Ops",
+    "msg": "Tether outflow alert triggered at 9:45am.",
+    "timestamp": "09:50",
+    "channel": "ops",
+    "tags": ["alert", "tether"],
+    "used": false
+  }
+] 
