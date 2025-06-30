@@ -5,6 +5,9 @@ import { Textarea } from './ui/textarea';
 import SourcePanel from './SourcePanel';
 import sourceRegistry from '../data/source_registry.json';
 import { retrieveRelevantContent, processRagQuery, processUploadedFiles } from '../services/connections';
+import RagProcessingPipeline from './RagProcessingPipeline';
+import ChunkPreviewCards from './ChunkPreviewCards';
+import SourceAttribution from './SourceAttribution';
 
 function groupSourcesByType(sources) {
   return sources.reduce((acc, src) => {
@@ -40,6 +43,11 @@ export default function PromptDashboardApp({ onClose }) {
   const [sourceContributions, setSourceContributions] = useState({});
   const [llmResponse, setLlmResponse] = useState(null);
   const [processingTime, setProcessingTime] = useState(0);
+  const [processingStages, setProcessingStages] = useState([]);
+  const [retrievedChunks, setRetrievedChunks] = useState([]);
+  const [ragResponse, setRagResponse] = useState(null);
+  const [confidence, setConfidence] = useState(0);
+  const [sourceBreakdown, setSourceBreakdown] = useState([]);
 
   useEffect(() => {
     // Deep clone to avoid mutating the imported JSON
@@ -202,69 +210,142 @@ export default function PromptDashboardApp({ onClose }) {
     if (!prompt.trim()) return;
     
     setIsGenerating(true);
-    setProcessingStage('scanning');
+    setProcessingTime(0);
+    setRetrievedChunks([]);
+    setRagResponse(null);
+    setConfidence(0);
+    setSourceBreakdown([]);
+    
     const startTime = Date.now();
+    
+    // Initialize processing stages
+    const stages = [
+      {
+        type: 'scanning',
+        title: 'Scanning Sources',
+        description: 'Analyzing available data sources',
+        status: 'processing',
+        details: 'Checking local files, web content, and connected sources...'
+      },
+      {
+        type: 'retrieving',
+        title: 'Retrieving Content',
+        description: 'Finding relevant information',
+        status: 'pending'
+      },
+      {
+        type: 'analyzing',
+        title: 'AI Analysis',
+        description: 'Processing with AI models',
+        status: 'pending'
+      },
+      {
+        type: 'complete',
+        title: 'Response Generated',
+        description: 'Analysis complete',
+        status: 'pending'
+      }
+    ];
+    
+    setProcessingStages(stages);
+    setProcessingStage('scanning');
     
     try {
       // Get selected sources
       const usedSources = sources.filter(s => s.used).map(s => s.type);
-
+      
       // Stage 1: Retrieve relevant content
+      setProcessingStages(prev => prev.map(stage => 
+        stage.type === 'scanning' 
+          ? { ...stage, status: 'complete', details: `Found ${usedSources.length} active sources` }
+          : stage.type === 'retrieving'
+          ? { ...stage, status: 'processing', details: 'Querying vector database...' }
+          : stage
+      ));
+      setProcessingStage('retrieving');
+      
       const retrievalResult = await retrieveRelevantContent(prompt, usedSources);
       
-      if (!retrievalResult.success) {
-        throw new Error(retrievalResult.error || 'Failed to retrieve content');
-      }
-
-      setRetrievedContent(retrievalResult.results || []);
-      
-      // Track source contributions
-      const contributions = {};
-      retrievalResult.results?.forEach(result => {
-        const source = result.source || 'unknown';
-        if (!contributions[source]) {
-          contributions[source] = {
-            count: 0,
-            totalScore: 0,
-            snippets: []
-          };
+      if (retrievalResult.success && retrievalResult.chunks) {
+        setRetrievedChunks(retrievalResult.chunks);
+        
+        // Calculate source breakdown
+        const breakdown = calculateSourceBreakdown(retrievalResult.chunks);
+        setSourceBreakdown(breakdown);
+        
+        setProcessingStages(prev => prev.map(stage => 
+          stage.type === 'retrieving' 
+            ? { ...stage, status: 'complete', details: `Retrieved ${retrievalResult.chunks.length} relevant chunks` }
+            : stage.type === 'analyzing'
+            ? { ...stage, status: 'processing', details: 'Generating AI response...' }
+            : stage
+        ));
+        setProcessingStage('analyzing');
+        
+        // Stage 2: Process with RAG
+        const ragResult = await processRagQuery(prompt, retrievalResult.chunks, usedSources);
+        
+        if (ragResult.success) {
+          setRagResponse(ragResult);
+          setConfidence(ragResult.confidence || 0.8);
+          
+          setProcessingStages(prev => prev.map(stage => 
+            stage.type === 'analyzing' 
+              ? { ...stage, status: 'complete', details: 'AI analysis completed' }
+              : stage.type === 'complete'
+              ? { ...stage, status: 'complete', details: 'Response ready' }
+              : stage
+          ));
+          setProcessingStage('complete');
         }
-        contributions[source].count++;
-        contributions[source].totalScore += result.score;
-        contributions[source].snippets.push({
-          title: result.title,
-          content: result.content,
-          score: result.score
-        });
-      });
-      setSourceContributions(contributions);
-
-      // Stage 2: Process with RAG
-      setProcessingStage('processing');
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Visual delay
-      
-      const ragResult = await processRagQuery(prompt, retrievalResult.results, usedSources);
-      
-      if (!ragResult.success) {
-        throw new Error(ragResult.error || 'Failed to process with RAG');
       }
-
-      setLlmResponse(ragResult);
-
-      // Stage 3: Complete
-      setProcessingStage('complete');
-      const { chartType } = parsePrompt(prompt);
-      setLastPrompt(prompt);
-      setLastChartType(chartType);
-      setLastSummary(ragResult.summary);
-      setProcessingTime(Date.now() - startTime);
-
+      
+      const endTime = Date.now();
+      setProcessingTime(endTime - startTime);
+      
     } catch (error) {
-      console.error('RAG processing error:', error);
-      setProcessingStage('error');
+      console.error('Error generating response:', error);
+      setProcessingStages(prev => prev.map(stage => 
+        stage.status === 'processing' 
+          ? { ...stage, status: 'error', details: error.message }
+          : stage
+      ));
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const calculateSourceBreakdown = (chunks) => {
+    const breakdown = {};
+    
+    chunks.forEach(chunk => {
+      const source = chunk.metadata?.source || 'unknown';
+      const filename = chunk.metadata?.filename || 'Unknown Document';
+      
+      if (!breakdown[source]) {
+        breakdown[source] = {
+          name: filename,
+          type: source,
+          chunks: 0,
+          contribution: 0
+        };
+      }
+      
+      breakdown[source].chunks++;
+    });
+    
+    // Calculate contribution percentages
+    const totalChunks = chunks.length;
+    Object.values(breakdown).forEach(source => {
+      source.contribution = Math.round((source.chunks / totalChunks) * 100);
+    });
+    
+    return Object.values(breakdown);
+  };
+
+  const handleChunkSelect = (chunk) => {
+    // Could open a modal or sidebar with full chunk details
+    console.log('Selected chunk:', chunk);
   };
 
   const ProcessingIndicator = () => {
@@ -440,220 +521,129 @@ export default function PromptDashboardApp({ onClose }) {
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto p-8">
-      <ProcessingIndicator />
-      
-      <div className="bg-gradient-to-br from-white via-gray-50 to-blue-50 rounded-3xl shadow-2xl border border-gray-100 overflow-hidden">
-        {/* Title bar */}
-        <div className="flex items-center justify-between px-8 py-5 bg-white/80 border-b border-gray-200 rounded-t-3xl" data-drag-handle>
-          <div className="flex items-center gap-2">
-            {/* Apple-style window controls */}
-            <div className="flex gap-1 mr-3">
-              <button onClick={onClose} className="w-3 h-3 rounded-full bg-red-500 border border-red-300 hover:scale-110 transition-transform" title="Close" />
-              <span className="w-3 h-3 rounded-full bg-yellow-400 border border-yellow-200" />
-              <span className="w-3 h-3 rounded-full bg-green-500 border border-green-300" />
-            </div>
-            <Terminal className="h-5 w-5 text-green-500" />
-            <span className="font-semibold text-gray-900 text-xl tracking-tight">Prompt Dashboard</span>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl h-full max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <div className="flex items-center gap-3">
+            <Terminal className="w-6 h-6 text-blue-600" />
+            <h2 className="text-xl font-semibold">Prompt Dashboard</h2>
           </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-lg"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
-        
-        {/* Prompt dashboard */}
-        <div className="p-10 space-y-10">
-          {/* Linear-style Command Bar */}
-          <div className="relative">
-            <div className="bg-white/90 border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200">
-              <div className="flex items-center gap-3">
-                <Command className="h-4 w-4 text-gray-400" />
-                <input
-                  ref={commandBarRef}
-                  type="text"
-                  placeholder="⌘+K to search deliverable types or start typing your prompt..."
-                  className="flex-1 bg-transparent border-none outline-none text-gray-700 placeholder-gray-400 text-sm"
-                  onFocus={() => setShowCommandBar(true)}
-                  onBlur={() => setTimeout(() => setShowCommandBar(false), 200)}
-                />
-                <kbd className="px-2 py-1 text-xs bg-gray-100 rounded text-gray-500">⌘+K</kbd>
-              </div>
-            </div>
-            
-            {/* Command Bar Dropdown */}
-            {showCommandBar && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-lg z-10 overflow-hidden">
-                <div className="p-2 border-b border-gray-100">
-                  <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Deliverable Types</div>
-                </div>
-                <div className="max-h-64 overflow-y-auto">
-                  {DELIVERABLE_TYPES.map((type) => (
-                    <button
-                      key={type.id}
-                      className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 transition-colors text-left"
-                      onClick={() => {
-                        setDeliverableType(type.id);
-                        setShowCommandBar(false);
-                      }}
-                    >
-                      <div className="text-gray-400">{type.icon}</div>
-                      <div>
-                        <div className="font-medium text-gray-900">{type.name}</div>
-                        <div className="text-xs text-gray-500">{type.description}</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
 
-          {/* Enhanced Prompt Input */}
-          <div className="bg-white/90 border border-gray-100 rounded-2xl p-8 mb-2 shadow hover:shadow-lg transition-all duration-200">
-            <div className="flex items-center gap-2 mb-4">
-              <Sparkles className="h-5 w-5 text-blue-500" />
-              <label className="text-lg font-semibold text-gray-800 tracking-tight">Task Prompt</label>
-            </div>
-            <Textarea
-              value={prompt}
-              onChange={e => setPrompt(e.target.value)}
-              placeholder="e.g. Create a concise summary of today's stablecoin regulatory developments with key insights and market impact..."
-              rows={3}
-              className="w-full mb-4 text-base border-gray-200 focus:border-blue-300 focus:ring-2 focus:ring-blue-200 transition-all duration-200"
+        <div className="flex-1 overflow-hidden flex">
+          {/* Left Panel - Sources */}
+          <div className="w-80 border-r border-gray-200 overflow-y-auto">
+            <SourcePanel
+              sources={sources}
+              onSourceToggle={handleToggleUsed}
+              onAddSource={() => {}}
             />
-            
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-600">Type:</span>
-                  <span className="text-sm text-gray-800 font-medium">
-                    {DELIVERABLE_TYPES.find(t => t.id === deliverableType)?.name}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-600">Sources:</span>
-                  <span className="text-sm text-gray-800 font-medium">
-                    {sources.filter(s => s.used).length} selected
-                  </span>
-                </div>
-              </div>
-              
-              <Button 
-                onClick={handleGenerate} 
-                disabled={isGenerating || !prompt} 
-                className="px-6 py-2.5 text-base rounded-xl shadow-sm hover:shadow-md transition-all duration-200 bg-blue-600 hover:bg-blue-700"
-              >
-                {isGenerating ? (
-                  <div className="flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                    Generating...
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4" />
-                    Generate Deliverable
-                  </div>
-                )}
-              </Button>
-            </div>
           </div>
 
-          {/* Source panels for each type */}
-          <div className="bg-white/80 border border-gray-100 rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 tracking-tight">Data Sources</h3>
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <span>{sources.filter(s => s.used).length} of {sources.length} selected</span>
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+          {/* Right Panel - Main Content */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Prompt Input */}
+            <div className="p-6 border-b border-gray-200">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Task Prompt
+                  </label>
+                  <Textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="Describe what you need to analyze or generate..."
+                    className="min-h-[100px]"
+                  />
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <select
+                      value={selectedDeliverableType}
+                      onChange={(e) => setSelectedDeliverableType(e.target.value)}
+                      className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+                    >
+                      <option value="1-pager">1-pager</option>
+                      <option value="chart">Chart</option>
+                      <option value="table">Table</option>
+                      <option value="summary">Summary</option>
+                    </select>
+                    
+                    <div className="text-sm text-gray-500">
+                      {sources.filter(s => s.used).length} sources selected
+                    </div>
+                  </div>
+                  
+                  <Button
+                    onClick={handleGenerate}
+                    disabled={isGenerating || !prompt.trim()}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        Generate Deliverable
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-              {Object.keys(grouped).map(type => (
-                <SourcePanel
-                  key={type}
-                  type={type}
-                  sources={grouped[type]}
-                  onToggleUsed={idx => handleToggleUsed(type, idx)}
-                />
-              ))}
-              {/* Local Files section */}
-              {localFiles.length > 0 && (
-                <div className="col-span-2 md:col-span-1">
-                  <div className="font-semibold mb-2">Local Files</div>
-                  <div className="space-y-2">
-                    {localFiles.map((file, idx) => (
-                      <div key={file.name} className="bg-gray-50 rounded p-3 flex flex-col">
-                        <div className="font-medium text-gray-900">{file.name}</div>
-                        <div className="text-xs text-gray-600">{file.chunks} chunks indexed</div>
-                        <Button
-                          size="sm"
-                          className="mt-2"
-                          variant={sources.some(s => s.type === 'local' && s.title === file.name && s.used) ? 'default' : 'outline'}
-                          onClick={() => {
-                            // Add or toggle this file as a source
-                            setSources(prev => {
-                              const exists = prev.find(s => s.type === 'local' && s.title === file.name);
-                              if (exists) {
-                                return prev.map(s =>
-                                  s.type === 'local' && s.title === file.name
-                                    ? { ...s, used: !s.used }
-                                    : s
-                                );
-                              } else {
-                                return [
-                                  ...prev,
-                                  { type: 'local', title: file.name, used: true }
-                                ];
-                              }
-                            });
-                          }}
-                        >{sources.some(s => s.type === 'local' && s.title === file.name && s.used) ? 'Deselect' : 'Select'} Source</Button>
-                      </div>
-                    ))}
-                  </div>
+
+            {/* Content Area */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {isGenerating ? (
+                <div className="space-y-6">
+                  <RagProcessingPipeline
+                    currentStage={processingStage}
+                    stages={processingStages}
+                    retrievedChunks={retrievedChunks}
+                    processingTime={processingTime}
+                    confidence={confidence}
+                    sourceBreakdown={sourceBreakdown}
+                  />
+                </div>
+              ) : ragResponse ? (
+                <div className="space-y-6">
+                  {/* RAG Response with Attribution */}
+                  <SourceAttribution
+                    response={ragResponse.summary?.join('\n\n') || ragResponse.insights?.join('\n\n') || 'Response generated successfully.'}
+                    sources={sourceBreakdown}
+                    confidence={confidence}
+                  />
+                  
+                  {/* Retrieved Chunks */}
+                  <ChunkPreviewCards
+                    chunks={retrievedChunks}
+                    onChunkSelect={handleChunkSelect}
+                  />
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <Brain className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    Ready to Generate
+                  </h3>
+                  <p className="text-gray-500">
+                    Enter your prompt and select data sources to get started.
+                  </p>
                 </div>
               )}
             </div>
           </div>
-
-          {/* RAG Processing Results */}
-          <SourceContributionsPanel />
-          <LlmResponsePanel />
-
-          {/* Deliverable output */}
-          {lastPrompt && (
-            <div className="bg-white border border-gray-200 rounded-2xl shadow-lg p-8 hover:shadow-2xl transition-shadow">
-              <div className="mb-3 text-xs text-gray-500 flex flex-wrap gap-4">
-                <span>Deliverable Type: <span className="font-semibold text-gray-700">{deliverableType}</span></span>
-                <span>Prompt: <span className="font-semibold text-gray-700">{lastPrompt}</span></span>
-                <span>Processing Time: <span className="font-semibold text-gray-700">{(processingTime / 1000).toFixed(1)}s</span></span>
-              </div>
-              <div className="mb-3 text-xs text-gray-500">Sources Used:</div>
-              <ul className="mb-3 text-xs list-disc pl-5">
-                {sources.filter(s => s.used).map((src, i) => (
-                  <li key={i} className="flex items-center gap-2">
-                    <span className="inline-block w-2 h-2 rounded-full bg-blue-400 mr-1"></span>
-                    <span className="font-medium text-gray-700">[{src.type.charAt(0).toUpperCase() + src.type.slice(1)}]</span>
-                    <span>{src.subject || src.title || src.msg}</span>
-                    {src.attachments && src.attachments > 0 && (
-                      <span className="ml-2 text-blue-500" title="Attachment">📎 {src.attachments}</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              <div className="mb-3">
-                <span className="font-semibold text-gray-700">Summary (RAG Generated):</span>
-                <ul className="list-disc pl-5 mt-1">
-                  {lastSummary.map((s, i) => <li key={i} className="text-xs text-gray-700">{s}</li>)}
-                </ul>
-              </div>
-              <div className="border-t border-gray-100 my-6"></div>
-              <Chart chartType={lastChartType} />
-              <Button
-                className="mt-4 px-5 py-2 rounded-xl text-base shadow-sm"
-                onClick={() => navigator.clipboard.writeText(
-                  `Deliverable Type: ${deliverableType}\nPrompt: ${lastPrompt}\nSources Used:\n${sources.filter(s=>s.used).map(src=>`[${src.type.charAt(0).toUpperCase() + src.type.slice(1)}] ${src.subject || src.title || src.msg}`).join('\n')}\nSummary:\n${lastSummary.join('\n')}`
-                )}
-              >Copy to Clipboard</Button>
-            </div>
-          )}
         </div>
       </div>
     </div>
