@@ -12,4 +12,10 @@ services:
       - key: NODE_ENV
         value: production
       - key: FRONTEND_URL
-        value: https://ran-kv7ph8yf4-peteralys-projects.vercel.app 
+        value: https://ran-qhpd1nsoz-peteralys-projects.vercel.app
+      - key: ENHANCED_RAG_ENABLED
+        value: true
+      - key: ACTIVE_RAG_ENABLED
+        value: true
+      - key: MAX_DOCUMENTS_PER_QUERY
+        value: 5 
