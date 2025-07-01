@@ -1,6 +1,14 @@
 const { OpenAI } = require('openai');
 const { index } = require('./pinecone');
 
+// Helper function to sanitize filename for ASCII compatibility
+function sanitizeFilename(filename) {
+  return filename
+    .replace(/[^a-zA-Z0-9._-]/g, '_') // Replace non-ASCII chars with underscore
+    .replace(/_+/g, '_') // Replace multiple underscores with single
+    .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+}
+
 class EnhancedRAG {
   constructor() {
     this.openai = new OpenAI({
@@ -40,8 +48,9 @@ class EnhancedRAG {
       // Generate summary for retrieval
       const summary = await this.generateDocumentSummary(documentText, filename);
       
-      // Store full document
-      const documentId = `doc_${Date.now()}_${filename}`;
+      // Store full document with sanitized ID
+      const safeFilename = sanitizeFilename(filename);
+      const documentId = `doc_${Date.now()}_${safeFilename}`;
       this.documentStore.set(documentId, {
         id: documentId,
         filename,

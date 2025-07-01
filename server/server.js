@@ -1061,6 +1061,10 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
         safeFilename = safeFilename.normalize('NFC');
         console.log('Final safe filename:', safeFilename);
         
+        // Sanitize filename for ASCII compatibility with Pinecone
+        const sanitizedFilename = sanitizeFilename(safeFilename);
+        console.log('Sanitized filename for Pinecone:', sanitizedFilename);
+        
         let content = '';
         if (file.mimetype === 'application/pdf') {
           // PDF parsing
@@ -1087,7 +1091,7 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
         while (i < content.length) {
           const chunkText = content.slice(i, i + chunkSize);
           chunks.push({
-            id: `${safeFilename}-chunk-${i}`,
+            id: `${sanitizedFilename}-chunk-${i}`,
             content: chunkText,
           });
           i += chunkSize - overlap;
@@ -1136,6 +1140,10 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
         };
         contentIndex.push(fileRecord);
         console.log('File added to contentIndex successfully');
+        
+        // Log activity for frontend to detect
+        logActivity('upload', 'local', `Processed ${safeFilename} into ${chunks.length} chunks`, 'success');
+        
         processedFiles.push({
           name: safeFilename,
           size: file.size,
@@ -1160,8 +1168,19 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
   }
 });
 
+// Helper function to sanitize filename for ASCII compatibility
+function sanitizeFilename(filename) {
+  return filename
+    .replace(/[^a-zA-Z0-9._-]/g, '_') // Replace non-ASCII chars with underscore
+    .replace(/_+/g, '_') // Replace multiple underscores with single
+    .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+}
+
 // Helper function to chunk content
 function chunkContent(content, filename) {
+  // Sanitize filename for ASCII compatibility
+  const safeFilename = sanitizeFilename(filename);
+  
   // Split content into paragraphs and filter out empty ones
   const paragraphs = content
     .split(/\n\s*\n/)
@@ -1171,7 +1190,7 @@ function chunkContent(content, filename) {
   // If we have paragraphs, use them as chunks
   if (paragraphs.length > 0) {
     return paragraphs.map((paragraph, index) => ({
-      id: `${filename}_chunk_${index}`,
+      id: `${safeFilename}-chunk-${index}`,
       content: paragraph,
       metadata: {
         filename,
@@ -1188,7 +1207,7 @@ function chunkContent(content, filename) {
     .filter(s => s.length > 20);
   
   return sentences.map((sentence, index) => ({
-    id: `${filename}_chunk_${index}`,
+    id: `${safeFilename}-chunk-${index}`,
     content: sentence,
     metadata: {
       filename,
@@ -1773,6 +1792,38 @@ app.get('/api/enhanced-documents', (req, res) => {
     });
   } catch (error) {
     console.error('Error getting enhanced documents:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Get uploaded files endpoint
+app.get('/api/uploaded-files', (req, res) => {
+  try {
+    // Return files from contentIndex (in-memory storage)
+    const files = contentIndex
+      .filter(item => item.metadata?.source === 'local')
+      .map(item => ({
+        id: item.id,
+        filename: item.metadata?.filename || 'Unknown',
+        size: item.metadata?.size || 0,
+        chunks: item.metadata?.chunkCount || 0,
+        uploadedAt: item.metadata?.uploadedAt || new Date().toISOString(),
+        type: item.metadata?.type || 'document',
+        source: 'local',
+        enhancedRAGIndexed: item.metadata?.enhancedRAGIndexed || false,
+        pineconeIndexed: item.metadata?.pineconeIndexed || false
+      }));
+    
+    res.json({
+      success: true,
+      files,
+      total: files.length
+    });
+  } catch (error) {
+    console.error('Error getting uploaded files:', error);
     res.status(500).json({
       success: false,
       error: error.message

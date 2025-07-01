@@ -86,40 +86,31 @@ export default function PromptDashboardApp({ onClose }) {
   useEffect(() => {
     async function fetchLocalFiles() {
       try {
-        // Fetch from backend: get all indexed local files
-        const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://ran-1.onrender.com'}/api/activity?limit=100`);
+        // Fetch from backend: get all uploaded local files
+        const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:3001'}/api/uploaded-files`);
         if (!res.ok) {
-          console.log('Activity endpoint not available, skipping local files fetch');
+          console.log('Uploaded files endpoint not available, skipping local files fetch');
           return;
         }
         const data = await res.json();
         if (data.success) {
-          // Filter for local uploads
-          const files = data.activity
-            .filter(a => a.type === 'upload' && a.status === 'success')
-            .map(a => a.message.match(/Processed (.+) into (\d+) chunks/))
-            .filter(Boolean)
-            .map(match => ({
-              name: match[1],
-              chunks: parseInt(match[2], 10)
-            }));
-          setLocalFiles(files);
-          
           // Convert uploaded files to source format for sidebar
-          const uploadedSources = files.map((file, index) => ({
+          const uploadedSources = data.files.map((file, index) => ({
             id: `uploaded_${index}`,
             type: 'local',
-            title: file.name,
-            subject: file.name,
+            title: file.filename,
+            subject: file.filename,
             from: 'Uploaded File',
-            date: 'Recently uploaded',
+            date: new Date(file.uploadedAt).toLocaleDateString(),
             used: false,
             chunks: file.chunks,
             source: 'local',
             metadata: {
-              filename: file.name,
+              filename: file.filename,
               source: 'local',
-              chunks: file.chunks
+              chunks: file.chunks,
+              size: file.size,
+              type: file.type
             }
           }));
           
@@ -128,9 +119,11 @@ export default function PromptDashboardApp({ onClose }) {
             const existingSources = prev.filter(s => s.type !== 'local');
             return [...existingSources, ...uploadedSources];
           });
+          
+          setLocalFiles(data.files);
         }
       } catch (err) {
-        console.log('Activity fetch failed, continuing without local files:', err.message);
+        console.log('Uploaded files fetch failed, continuing without local files:', err.message);
         // Continue without local files - this is not critical
       }
     }
