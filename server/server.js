@@ -12,6 +12,7 @@ require('dotenv').config();
 const { index } = require('./pinecone');
 const { OpenAI } = require('openai');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const { EnhancedRAG } = require('./enhancedRAG');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -1033,6 +1034,9 @@ app.get('/api/scrape', async (req, res) => {
   }
 });
 
+// Initialize Enhanced RAG system
+const enhancedRAG = new EnhancedRAG();
+
 // File Upload and Processing
 app.post('/api/upload', upload.array('files'), async (req, res) => {
   try {
@@ -1074,7 +1078,8 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
         } else {
           throw new Error('Unsupported file type');
         }
-        // Chunk content
+
+        // Chunk content (keep existing chunking for backward compatibility)
         const chunkSize = 1000;
         const overlap = 200;
         const chunks = [];
@@ -1087,6 +1092,20 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
           });
           i += chunkSize - overlap;
         }
+
+        // Enhanced RAG: Store document with summary and full content
+        console.log(`🔄 Enhanced RAG: Processing document "${safeFilename}"`);
+        let enhancedRAGSuccess = false;
+        let documentId = null;
+        try {
+          documentId = await enhancedRAG.storeDocument(content, safeFilename, chunks);
+          enhancedRAGSuccess = true;
+          console.log(`✅ Enhanced RAG: Successfully stored document "${safeFilename}"`);
+        } catch (enhancedRAGError) {
+          console.error('Enhanced RAG storage failed:', enhancedRAGError);
+          console.log('Continuing with legacy chunking...');
+        }
+
         // Index chunks in Pinecone (optional - continue even if it fails)
         console.log(`Attempting to index ${chunks.length} chunks for file: ${safeFilename}`);
         let pineconeSuccess = false;
@@ -1102,7 +1121,7 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
         // Add summary record to contentIndex for dashboard visibility (always do this)
         console.log('Adding file to contentIndex for dashboard visibility');
         const fileRecord = {
-          id: `${safeFilename}-${Date.now()}`,
+          id: documentId || `${safeFilename}-${Date.now()}`,
           content: content.slice(0, 5000), // Store up to 5000 chars as preview
           metadata: {
             source: 'local',
@@ -1111,7 +1130,8 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
             size: file.size,
             uploadedAt: new Date().toISOString(),
             chunkCount: chunks.length,
-            pineconeIndexed: pineconeSuccess
+            pineconeIndexed: pineconeSuccess,
+            enhancedRAGIndexed: enhancedRAGSuccess
           }
         };
         contentIndex.push(fileRecord);
@@ -1122,6 +1142,7 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
           content: chunks,
           type: file.mimetype,
           error: null,
+          enhancedRAGId: documentId
         });
       } catch (err) {
         processedFiles.push({
@@ -1538,6 +1559,225 @@ app.use('*', (req, res) => {
     success: false,
     error: 'Endpoint not found'
   });
+});
+
+// Enhanced RAG Query Endpoint with Active RAG features
+app.post('/api/enhanced-query', async (req, res) => {
+  try {
+    const { query, useActiveRAG = true, maxDocuments = 5 } = req.body;
+    
+    if (!query) {
+      return res.status(400).json({
+        success: false,
+        error: 'Query is required'
+      });
+    }
+
+    console.log(`🔍 Enhanced RAG Query: "${query}"`);
+
+    // Step 1: Multi-query generation for better retrieval
+    let queries = [query];
+    if (useActiveRAG) {
+      try {
+        const multiQueries = await generateMultiQueries(query);
+        queries = [query, ...multiQueries];
+        console.log(`📝 Generated ${queries.length} queries for retrieval`);
+      } catch (error) {
+        console.error('Multi-query generation failed:', error);
+      }
+    }
+
+    // Step 2: Retrieve documents using all queries
+    const allDocuments = [];
+    for (const q of queries) {
+      try {
+        const docs = await enhancedRAG.retrieveDocuments(q, maxDocuments);
+        allDocuments.push(...docs);
+      } catch (error) {
+        console.error(`Error retrieving documents for query "${q}":`, error);
+      }
+    }
+
+    // Step 3: Deduplicate and grade documents
+    const uniqueDocuments = deduplicateDocuments(allDocuments);
+    console.log(`📚 Retrieved ${uniqueDocuments.length} unique documents`);
+
+    // Step 4: Grade document relevance (Active RAG)
+    let gradedDocuments = uniqueDocuments;
+    if (useActiveRAG && uniqueDocuments.length > 0) {
+      console.log('🎯 Grading document relevance...');
+      const gradingPromises = uniqueDocuments.map(async (doc) => {
+        try {
+          const relevanceScore = await enhancedRAG.gradeDocumentRelevance(query, doc);
+          return { ...doc, relevanceScore };
+        } catch (error) {
+          console.error('Error grading document:', error);
+          return { ...doc, relevanceScore: 5 }; // Default score
+        }
+      });
+      
+      gradedDocuments = await Promise.all(gradingPromises);
+      gradedDocuments.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
+      console.log(`📊 Document relevance scores: ${gradedDocuments.map(d => `${d.filename}: ${d.relevanceScore}`).join(', ')}`);
+    }
+
+    // Step 5: Generate answer using top documents
+    const topDocuments = gradedDocuments.slice(0, 3); // Use top 3 most relevant
+    let answer = '';
+    let hallucinationCheck = true;
+
+    if (topDocuments.length > 0) {
+      try {
+        answer = await generateAnswerWithSources(query, topDocuments);
+        
+        // Step 6: Check for hallucinations (Active RAG)
+        if (useActiveRAG) {
+          console.log('🔍 Checking for hallucinations...');
+          hallucinationCheck = await enhancedRAG.checkHallucinations(answer, topDocuments);
+          if (!hallucinationCheck) {
+            console.log('⚠️ Potential hallucination detected, regenerating answer...');
+            answer = await generateAnswerWithSources(query, topDocuments, true); // Force conservative mode
+          }
+        }
+      } catch (error) {
+        console.error('Error generating answer:', error);
+        answer = 'Sorry, I encountered an error while generating the answer.';
+      }
+    } else {
+      answer = 'I could not find any relevant documents to answer your question.';
+    }
+
+    // Step 7: Prepare response with source analysis
+    const response = {
+      success: true,
+      answer,
+      sources: topDocuments.map(doc => ({
+        filename: doc.filename,
+        summary: doc.summary,
+        relevanceScore: doc.relevanceScore,
+        score: doc.score
+      })),
+      metadata: {
+        totalDocumentsRetrieved: uniqueDocuments.length,
+        queriesUsed: queries,
+        hallucinationCheck: hallucinationCheck,
+        enhancedRAGEnabled: useActiveRAG
+      }
+    };
+
+    console.log(`✅ Enhanced RAG Query completed successfully`);
+    res.json(response);
+
+  } catch (error) {
+    console.error('Enhanced RAG Query error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Helper function to generate multiple queries for better retrieval
+async function generateMultiQueries(originalQuery) {
+  try {
+    const prompt = `Generate 3 different ways to search for information related to this query. 
+    Each query should focus on different aspects or use different terminology.
+    
+    Original Query: ${originalQuery}
+    
+    Generate 3 alternative queries:
+    1. 
+    2. 
+    3.`;
+    
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 200,
+      temperature: 0.7
+    });
+    
+    const content = response.choices[0].message.content;
+    const queries = content.split('\n')
+      .filter(line => line.match(/^\d+\./))
+      .map(line => line.replace(/^\d+\.\s*/, '').trim())
+      .filter(q => q.length > 0);
+    
+    return queries.slice(0, 3); // Return max 3 queries
+  } catch (error) {
+    console.error('Error generating multi-queries:', error);
+    return [];
+  }
+}
+
+// Helper function to deduplicate documents
+function deduplicateDocuments(documents) {
+  const seen = new Set();
+  return documents.filter(doc => {
+    const key = doc.id || doc.filename;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+// Helper function to generate answer with sources
+async function generateAnswerWithSources(query, documents, conservativeMode = false) {
+  try {
+    const context = documents.map(doc => 
+      `Document: ${doc.filename}\nContent: ${doc.summary || doc.content}\n---`
+    ).join('\n');
+    
+    const prompt = conservativeMode 
+      ? `Answer the question based ONLY on the provided documents. If the documents don't contain enough information to answer the question, say "I don't have enough information to answer this question."
+      
+      Question: ${query}
+      
+      Documents:
+      ${context}
+      
+      Answer (be conservative and only use information from the documents):`
+      : `Answer the question based on the provided documents. Be helpful and comprehensive.
+      
+      Question: ${query}
+      
+      Documents:
+      ${context}
+      
+      Answer:`;
+    
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 1000,
+      temperature: 0.3
+    });
+    
+    return response.choices[0].message.content;
+  } catch (error) {
+    console.error('Error generating answer:', error);
+    throw error;
+  }
+}
+
+// Enhanced RAG Documents Endpoint
+app.get('/api/enhanced-documents', (req, res) => {
+  try {
+    const documents = enhancedRAG.getAllDocuments();
+    res.json({
+      success: true,
+      documents,
+      total: documents.length
+    });
+  } catch (error) {
+    console.error('Error getting enhanced documents:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
 });
 
 app.listen(PORT, () => {

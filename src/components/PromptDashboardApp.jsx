@@ -8,6 +8,7 @@ import { retrieveRelevantContent, processRagQuery, processUploadedFiles, process
 import RagProcessingPipeline from './RagProcessingPipeline';
 import ChunkPreviewCards from './ChunkPreviewCards';
 import SourceAttribution from './SourceAttribution';
+import EnhancedRAGPanel from './EnhancedRAGPanel';
 
 function groupSourcesByType(sources) {
   return sources.reduce((acc, src) => {
@@ -51,6 +52,10 @@ export default function PromptDashboardApp({ onClose }) {
 
   const [internetSearch, setInternetSearch] = useState(false);
   const [showSourceWarning, setShowSourceWarning] = useState(false);
+  
+  // Enhanced RAG States
+  const [activeTab, setActiveTab] = useState('enhanced'); // 'enhanced' or 'classic'
+  const [enhancedRAGResult, setEnhancedRAGResult] = useState(null);
 
   useEffect(() => {
     // Deep clone to avoid mutating the imported JSON
@@ -162,7 +167,7 @@ export default function PromptDashboardApp({ onClose }) {
     if (prompt.toLowerCase().includes('stablecoin')) {
       return [
         '🇺🇸 U.S. Regulation: New Stablecoin Oversight Act introduced, requiring 100% reserves and real-time attestations.',
-        '💸 Tether Volatility: $1.2B net outflow, peg briefly lost, restored by arbitrage.',
+        '🇺🇸 Tether Volatility: $1.2B net outflow, peg briefly lost, restored by arbitrage.',
         '🇪🇺 EU MiCA Enforcement: MiCA now in effect, only USDC/EURC approved, Tether/DAI not approved.',
         '🌐 Internal Risk: Cross-border corridors using non-compliant stablecoins may face operational halts.',
       ];
@@ -585,122 +590,171 @@ export default function PromptDashboardApp({ onClose }) {
           </button>
         </div>
 
-        <div className="flex-1 overflow-hidden flex">
-          {/* Left Panel - Sources */}
-          <div className="w-80 border-r border-gray-200 overflow-y-auto">
-            <SourcePanel
-              sources={sources}
-              onSourceToggle={internetSearch ? undefined : handleToggleUsed}
-              onAddSource={() => {}}
-            />
-            <div className="p-4">
-              <button
-                className={`w-full py-2 px-4 rounded-lg border ${internetSearch ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border-blue-600'} mt-4`}
-                onClick={() => setInternetSearch(v => !v)}
-              >
-                {internetSearch ? 'Internet Search Enabled' : 'Use Internet Search Only'}
-              </button>
-            </div>
+        {/* Tab Navigation */}
+        <div className="border-b border-gray-200">
+          <div className="flex">
+            <button
+              onClick={() => setActiveTab('enhanced')}
+              className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'enhanced'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Brain className="w-4 h-4" />
+                Enhanced RAG
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('classic')}
+              className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'classic'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Search className="w-4 h-4" />
+                Classic RAG
+              </div>
+            </button>
           </div>
+        </div>
 
-          {/* Right Panel - Main Content */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Prompt Input */}
-            <div className="p-6 border-b border-gray-200">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Task Prompt
-                  </label>
-                  <Textarea
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="Describe what you need to analyze or generate..."
-                    className="min-h-[100px]"
-                  />
-                </div>
-                {showSourceWarning && (
-                  <div className="text-red-600 text-sm font-medium mb-2">
-                    Please select at least one source or enable Internet Search.
-                  </div>
-                )}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <select
-                      value={selectedDeliverableType}
-                      onChange={(e) => setSelectedDeliverableType(e.target.value)}
-                      className="border border-gray-300 rounded-md px-3 py-2 text-sm"
-                    >
-                      <option value="1-pager">1-pager</option>
-                      <option value="chart">Chart</option>
-                      <option value="table">Table</option>
-                      <option value="summary">Summary</option>
-                    </select>
-                    <div className="text-sm text-gray-500">
-                      {internetSearch ? 'Internet Search Only' : `${sources.filter(s => s.used).length} sources selected`}
-                    </div>
-                  </div>
-                  <Button
-                    onClick={handleGenerate}
-                    disabled={isGenerating || !prompt.trim()}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    {isGenerating ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4 mr-2" />
-                        Generate Deliverable
-                      </>
-                    )}
-                  </Button>
-                </div>
+        <div className="flex-1 overflow-hidden flex">
+          {/* Left Panel - Sources (only show for classic RAG) */}
+          {activeTab === 'classic' && (
+            <div className="w-80 border-r border-gray-200 overflow-y-auto">
+              <SourcePanel
+                sources={sources}
+                onSourceToggle={internetSearch ? undefined : handleToggleUsed}
+                onAddSource={() => {}}
+              />
+              <div className="p-4">
+                <button
+                  className={`w-full py-2 px-4 rounded-lg border ${internetSearch ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border-blue-600'} mt-4`}
+                  onClick={() => setInternetSearch(v => !v)}
+                >
+                  {internetSearch ? 'Internet Search Enabled' : 'Use Internet Search Only'}
+                </button>
               </div>
             </div>
+          )}
 
-            {/* Content Area */}
-            <div className="flex-1 overflow-y-auto p-6">
-              {isGenerating ? (
-                <div className="space-y-6">
-                  <RagProcessingPipeline
-                    currentStage={processingStage}
-                    stages={processingStages}
-                    retrievedChunks={retrievedChunks}
-                    processingTime={processingTime}
-                    confidence={confidence}
-                    sourceBreakdown={sourceBreakdown}
-                  />
+          {/* Right Panel - Main Content */}
+          <div className={`flex-1 flex flex-col overflow-hidden ${activeTab === 'classic' ? '' : 'w-full'}`}>
+            {activeTab === 'enhanced' ? (
+              // Enhanced RAG Interface
+              <div className="flex-1 overflow-y-auto p-6">
+                <EnhancedRAGPanel 
+                  onQuerySubmit={(result) => {
+                    setEnhancedRAGResult(result);
+                    console.log('Enhanced RAG result:', result);
+                  }}
+                />
+              </div>
+            ) : (
+              // Classic RAG Interface
+              <>
+                {/* Prompt Input */}
+                <div className="p-6 border-b border-gray-200">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Task Prompt
+                      </label>
+                      <Textarea
+                        value={prompt}
+                        onChange={(e) => setPrompt(e.target.value)}
+                        placeholder="Describe what you need to analyze or generate..."
+                        className="min-h-[100px]"
+                      />
+                    </div>
+                    {showSourceWarning && (
+                      <div className="text-red-600 text-sm font-medium mb-2">
+                        Please select at least one source or enable Internet Search.
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <select
+                          value={selectedDeliverableType}
+                          onChange={(e) => setSelectedDeliverableType(e.target.value)}
+                          className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        >
+                          <option value="1-pager">1-pager</option>
+                          <option value="chart">Chart</option>
+                          <option value="table">Table</option>
+                          <option value="summary">Summary</option>
+                        </select>
+                        <div className="text-sm text-gray-500">
+                          {internetSearch ? 'Internet Search Only' : `${sources.filter(s => s.used).length} sources selected`}
+                        </div>
+                      </div>
+                      <Button
+                        onClick={handleGenerate}
+                        disabled={isGenerating || !prompt.trim()}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        {isGenerating ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4 mr-2" />
+                            Generate Deliverable
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-              ) : ragResponse ? (
-                <div className="space-y-6">
-                  {/* RAG Response with Attribution */}
-                  <SourceAttribution
-                    response={ragResponse.summary?.join('\n\n') || ragResponse.insights?.join('\n\n') || 'Response generated successfully.'}
-                    sources={sourceBreakdown}
-                    confidence={confidence}
-                  />
-                  
-                  {/* Retrieved Chunks */}
-                  <ChunkPreviewCards
-                    chunks={retrievedChunks}
-                    onChunkSelect={handleChunkSelect}
-                  />
+
+                {/* Content Area */}
+                <div className="flex-1 overflow-y-auto p-6">
+                  {isGenerating ? (
+                    <div className="space-y-6">
+                      <RagProcessingPipeline
+                        currentStage={processingStage}
+                        stages={processingStages}
+                        retrievedChunks={retrievedChunks}
+                        processingTime={processingTime}
+                        confidence={confidence}
+                        sourceBreakdown={sourceBreakdown}
+                      />
+                    </div>
+                  ) : ragResponse ? (
+                    <div className="space-y-6">
+                      {/* RAG Response with Attribution */}
+                      <SourceAttribution
+                        response={ragResponse.summary?.join('\n\n') || ragResponse.insights?.join('\n\n') || 'Response generated successfully.'}
+                        sources={sourceBreakdown}
+                        confidence={confidence}
+                      />
+                      
+                      {/* Retrieved Chunks */}
+                      <ChunkPreviewCards
+                        chunks={retrievedChunks}
+                        onChunkSelect={handleChunkSelect}
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <Brain className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        Ready to Generate
+                      </h3>
+                      <p className="text-gray-500">
+                        Enter your prompt and select data sources to get started.
+                      </p>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="text-center py-12">
-                  <Brain className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">
-                    Ready to Generate
-                  </h3>
-                  <p className="text-gray-500">
-                    Enter your prompt and select data sources to get started.
-                  </p>
-                </div>
-              )}
-            </div>
+              </>
+            )}
           </div>
         </div>
       </div>

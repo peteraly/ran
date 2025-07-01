@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: ran-enhanced-rag-backend
+    env: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: PINECONE_INDEX
+        value: rag-index
+      - key: ENHANCED_RAG_ENABLED
+        value: true
+      - key: ACTIVE_RAG_ENABLED
+        value: true
+      - key: MAX_DOCUMENTS_PER_QUERY
+        value: 5
+    healthCheckPath: /api/health
+    autoDeploy: true 
