@@ -1580,6 +1580,38 @@ app.use('*', (req, res) => {
   });
 });
 
+// Get uploaded files endpoint
+app.get('/api/uploaded-files', (req, res) => {
+  try {
+    // Return files from contentIndex (in-memory storage)
+    const files = contentIndex
+      .filter(item => item.metadata?.source === 'local')
+      .map(item => ({
+        id: item.id,
+        filename: item.metadata?.filename || 'Unknown',
+        size: item.metadata?.size || 0,
+        chunks: item.metadata?.chunkCount || 0,
+        uploadedAt: item.metadata?.uploadedAt || new Date().toISOString(),
+        type: item.metadata?.type || 'document',
+        source: 'local',
+        enhancedRAGIndexed: item.metadata?.enhancedRAGIndexed || false,
+        pineconeIndexed: item.metadata?.pineconeIndexed || false
+      }));
+    
+    res.json({
+      success: true,
+      files,
+      total: files.length
+    });
+  } catch (error) {
+    console.error('Error getting uploaded files:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Enhanced RAG Query Endpoint with Active RAG features
 app.post('/api/enhanced-query', async (req, res) => {
   try {
@@ -1792,38 +1824,6 @@ app.get('/api/enhanced-documents', (req, res) => {
     });
   } catch (error) {
     console.error('Error getting enhanced documents:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Get uploaded files endpoint
-app.get('/api/uploaded-files', (req, res) => {
-  try {
-    // Return files from contentIndex (in-memory storage)
-    const files = contentIndex
-      .filter(item => item.metadata?.source === 'local')
-      .map(item => ({
-        id: item.id,
-        filename: item.metadata?.filename || 'Unknown',
-        size: item.metadata?.size || 0,
-        chunks: item.metadata?.chunkCount || 0,
-        uploadedAt: item.metadata?.uploadedAt || new Date().toISOString(),
-        type: item.metadata?.type || 'document',
-        source: 'local',
-        enhancedRAGIndexed: item.metadata?.enhancedRAGIndexed || false,
-        pineconeIndexed: item.metadata?.pineconeIndexed || false
-      }));
-    
-    res.json({
-      success: true,
-      files,
-      total: files.length
-    });
-  } catch (error) {
-    console.error('Error getting uploaded files:', error);
     res.status(500).json({
       success: false,
       error: error.message

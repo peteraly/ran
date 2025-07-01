@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { TestTube, Play, CheckCircle, AlertCircle, Database, Brain, Search } from 'lucide-react';
 import { Button } from './ui/button';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://ran-enhanced-rag-backend.onrender.com';
 
 export default function RagTestPanel() {
   const [isLoading, setIsLoading] = useState(false);
