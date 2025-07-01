@@ -28,6 +28,6 @@
     }
   ],
   "env": {
-    "REACT_APP_API_URL": "https://ran-enhanced-rag-backend.onrender.com"
+    "REACT_APP_API_URL": "https://ran-backend-pp3x.onrender.com"
   }
 } 

@@ -87,7 +87,7 @@ export default function PromptDashboardApp({ onClose }) {
     async function fetchLocalFiles() {
       try {
         // Fetch from backend: get all uploaded local files
-        const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://ran-enhanced-rag-backend.onrender.com'}/api/uploaded-files`);
+        const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://ran-backend-pp3x.onrender.com'}/api/uploaded-files`);
         if (!res.ok) {
           console.log('Uploaded files endpoint not available, skipping local files fetch');
           return;

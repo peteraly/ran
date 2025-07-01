@@ -17,7 +17,7 @@ import {
   Search
 } from 'lucide-react';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://ran-enhanced-rag-backend.onrender.com';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://ran-backend-pp3x.onrender.com';
 
 export default function SourceActivityDashboard() {
   const [sourceStats, setSourceStats] = useState({});
