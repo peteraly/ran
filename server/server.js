@@ -1604,6 +1604,24 @@ app.get('/api/uploaded-files', (req, res) => {
   }
 });
 
+// Enhanced RAG Documents Endpoint
+app.get('/api/enhanced-documents', (req, res) => {
+  try {
+    const documents = enhancedRAG.getAllDocuments();
+    res.json({
+      success: true,
+      documents,
+      total: documents.length
+    });
+  } catch (error) {
+    console.error('Error getting enhanced documents:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // 404 handler
 app.use('*', (req, res) => {
   res.status(404).json({
@@ -1812,24 +1830,6 @@ async function generateAnswerWithSources(query, documents, conservativeMode = fa
     throw error;
   }
 }
-
-// Enhanced RAG Documents Endpoint
-app.get('/api/enhanced-documents', (req, res) => {
-  try {
-    const documents = enhancedRAG.getAllDocuments();
-    res.json({
-      success: true,
-      documents,
-      total: documents.length
-    });
-  } catch (error) {
-    console.error('Error getting enhanced documents:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
