@@ -1572,14 +1572,6 @@ app.use((error, req, res, next) => {
   });
 });
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Endpoint not found'
-  });
-});
-
 // Get uploaded files endpoint
 app.get('/api/uploaded-files', (req, res) => {
   try {
@@ -1610,6 +1602,14 @@ app.get('/api/uploaded-files', (req, res) => {
       error: error.message
     });
   }
+});
+
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Endpoint not found'
+  });
 });
 
 // Enhanced RAG Query Endpoint with Active RAG features
