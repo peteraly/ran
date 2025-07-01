@@ -52,10 +52,11 @@ check_dependencies() {
 build_frontend() {
     print_status "Building frontend..."
     
-    cd frontend || {
-        print_error "Frontend directory not found"
+    # Frontend is in root directory
+    if [ ! -f "package.json" ]; then
+        print_error "Frontend package.json not found in root directory"
         exit 1
-    }
+    fi
     
     # Install dependencies
     print_status "Installing frontend dependencies..."
@@ -71,8 +72,6 @@ build_frontend() {
         print_error "Frontend build failed"
         exit 1
     fi
-    
-    cd ..
 }
 
 # Deploy backend to Render
@@ -118,15 +117,45 @@ deploy_backend() {
 deploy_frontend() {
     print_status "Deploying frontend to Vercel..."
     
-    cd frontend || {
-        print_error "Frontend directory not found"
-        exit 1
-    }
-    
-    # Check if vercel.json exists
-    if [ ! -f "../vercel.json" ]; then
+    # Frontend is in root directory
+    if [ ! -f "vercel.json" ]; then
         print_warning "vercel.json not found, creating..."
-        cp ../vercel.json .
+        # Create vercel.json if it doesn't exist
+        cat > vercel.json << EOF
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "build"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/static/(.*)",
+      "dest": "/static/\$1"
+    },
+    {
+      "src": "/favicon.ico",
+      "dest": "/favicon.ico"
+    },
+    {
+      "src": "/manifest.json",
+      "dest": "/manifest.json"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
+  "env": {
+    "REACT_APP_API_URL": "https://ran-enhanced-rag-backend.onrender.com"
+  }
+}
+EOF
     fi
     
     # Deploy using Vercel CLI (if available)
@@ -141,8 +170,6 @@ deploy_frontend() {
         print_warning "4. Set output directory: build"
         print_warning "5. Add environment variable: REACT_APP_API_URL"
     fi
-    
-    cd ..
 }
 
 # Update environment variables
@@ -168,6 +195,32 @@ EOF
     print_success "Environment variables template created (.env.example)"
 }
 
+# Test the deployment
+test_deployment() {
+    print_status "Testing deployment..."
+    
+    # Test backend health
+    print_status "Testing backend health endpoint..."
+    if command -v curl &> /dev/null; then
+        BACKEND_URL="https://ran-enhanced-rag-backend.onrender.com"
+        HEALTH_RESPONSE=$(curl -s "$BACKEND_URL/api/health" 2>/dev/null)
+        if [[ $HEALTH_RESPONSE == *"healthy"* ]]; then
+            print_success "Backend health check passed"
+        else
+            print_warning "Backend health check failed or backend not deployed yet"
+        fi
+    else
+        print_warning "curl not available, skipping health check"
+    fi
+    
+    print_status "Testing frontend build..."
+    if [ -d "build" ]; then
+        print_success "Frontend build directory exists"
+    else
+        print_warning "Frontend build directory not found"
+    fi
+}
+
 # Main deployment function
 main() {
     print_status "Starting Enhanced RAG deployment process..."
@@ -186,6 +239,9 @@ main() {
     
     # Deploy frontend
     deploy_frontend
+    
+    # Test deployment
+    test_deployment
     
     print_success "Deployment process completed!"
     print_status "Next steps:"
