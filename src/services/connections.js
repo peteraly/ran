@@ -206,29 +206,87 @@ export const retrieveRelevantContent = async (query, sources = []) => {
   }
 };
 
-// RAG Processing
-export const processRagQuery = async (query, context, sources = []) => {
+// Enhanced RAG processing with AI synthesis
+export const processRagQuery = async (query, chunks, sources, deliverableType = 'executive_summary') => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/rag/process`, {
+    console.log('🔄 Processing RAG query with AI synthesis:', { query, chunks: chunks?.length, sources, deliverableType });
+    
+    const response = await fetch(`${API_BASE_URL}/rag/process`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         query,
-        context,
-        sources
-      })
+        context: chunks,
+        sources,
+        deliverableType
+      }),
     });
 
-    return await response.json();
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ RAG processing completed:', data);
+    
+    return {
+      success: true,
+      summary: data.summary || [],
+      insights: data.insights || [],
+      recommendations: data.recommendations || [],
+      confidence: data.confidence || 0,
+      sourcesUsed: data.sourcesUsed || 0,
+      processingTime: data.processingTime || 0,
+      deliverableType: data.deliverableType || 'executive_summary',
+      wordCount: data.wordCount || 0,
+      sourceMapping: data.sourceMapping || [],
+      diversityAnalysis: data.diversityAnalysis || {}
+    };
   } catch (error) {
-    throw new Error(`Failed to process RAG query: ${error.message}`);
+    console.error('❌ RAG processing failed:', error);
+    return processRagQueryFallback(query, chunks, sources, deliverableType);
+  }
+};
+
+// Multi-format deliverable generation
+export const generateMultiFormatDeliverables = async (query, chunks, sources) => {
+  try {
+    console.log('🔄 Generating multi-format deliverables:', { query, chunks: chunks?.length, sources });
+    
+    const response = await fetch(`${API_BASE_URL}/rag/multi-format`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query,
+        context: chunks,
+        sources
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ Multi-format generation completed:', data);
+    
+    return data;
+  } catch (error) {
+    console.error('❌ Multi-format generation failed:', error);
+    return {
+      success: false,
+      error: error.message,
+      formats: {}
+    };
   }
 };
 
 // Fallback RAG processing for when the backend RAG endpoint is not available
-export const processRagQueryFallback = async (query, chunks, sources) => {
+export const processRagQueryFallback = async (query, chunks, sources, deliverableType = 'executive_summary') => {
   try {
     // Simulate processing time
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -241,7 +299,11 @@ export const processRagQueryFallback = async (query, chunks, sources) => {
       recommendations: [],
       confidence: 0.8,
       sourcesUsed: sources.length,
-      processingTime: 2000
+      processingTime: 2000,
+      deliverableType: deliverableType,
+      wordCount: 0,
+      sourceMapping: [],
+      diversityAnalysis: {}
     };
 
     if (chunks && chunks.length > 0) {
