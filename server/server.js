@@ -1953,8 +1953,8 @@ async function generateAISynthesizedDeliverable(query, retrievedChunks, sources,
     
     const formatInstruction = formatInstructions[deliverableType] || formatInstructions.executive_summary;
     
-    // Enhanced synthesis prompt with Chain of Thought reasoning
-    const synthesisPrompt = `You are an expert analyst creating a high-quality deliverable based on retrieved document content. Use Chain of Thought reasoning to show your analysis process.
+    // Enhanced synthesis prompt with Chain of Thought reasoning and confidence scoring
+    const synthesisPrompt = `You are an expert analyst creating a high-quality deliverable based on retrieved document content. Use Chain of Thought reasoning to show your analysis process and include confidence levels for each claim.
 
 QUERY: "${query}"
 
@@ -1963,27 +1963,36 @@ ${contextText}
 
 ANALYSIS PROCESS:
 1. First, analyze the query to understand what information is needed
-2. Review each source to identify relevant information
-3. Synthesize findings into coherent insights
+2. Review each source to identify relevant information and assess reliability
+3. Synthesize findings into coherent insights with confidence scoring
 4. Structure the response according to the deliverable format
-5. Include reasoning annotations throughout
+5. Include reasoning annotations throughout with confidence indicators
 
 INSTRUCTIONS:
 1. Create a ${deliverableType} that directly answers the query
 2. Use Chain of Thought reasoning - explain your thinking process
-3. Include reasoning annotations like [REASONING: This conclusion is based on...] throughout the text
+3. Include reasoning annotations with confidence levels throughout the text
 4. Synthesize information from the retrieved content into a coherent, natural narrative
 5. Maintain strict source grounding - only use information from the provided content
 6. Include citations [1], [2], etc. to reference specific sources
 7. If information is missing or unclear, acknowledge limitations with reasoning
 8. ${formatInstruction}
 9. Ensure the tone is professional and actionable
+10. Assess confidence levels for each claim based on source quality and evidence strength
 
 REASONING ANNOTATION FORMAT:
 - Use [REASONING: explanation] for key conclusions
 - Use [EVIDENCE: source] for specific data points
 - Use [INFERENCE: logic] for derived insights
 - Use [LIMITATION: constraint] for acknowledged gaps
+- Use [HIGH_CONFIDENCE: claim] for claims with >80% confidence
+- Use [MEDIUM_CONFIDENCE: claim] for claims with 60-80% confidence
+- Use [LOW_CONFIDENCE: claim] for claims with <60% confidence
+
+CONFIDENCE ASSESSMENT CRITERIA:
+- HIGH (>80%): Direct quotes, specific data, multiple corroborating sources
+- MEDIUM (60-80%): Inferred conclusions, single source with good quality
+- LOW (<60%): Assumptions, limited evidence, unclear sources
 
 IMPORTANT: Only use information from the provided content. Do not add external knowledge or assumptions.`;
 
@@ -2039,7 +2048,10 @@ function extractReasoningAnnotations(content) {
     reasoning: /\[REASONING:\s*([^\]]+)\]/g,
     evidence: /\[EVIDENCE:\s*([^\]]+)\]/g,
     inference: /\[INFERENCE:\s*([^\]]+)\]/g,
-    limitation: /\[LIMITATION:\s*([^\]]+)\]/g
+    limitation: /\[LIMITATION:\s*([^\]]+)\]/g,
+    highConfidence: /\[HIGH_CONFIDENCE:\s*([^\]]+)\]/g,
+    mediumConfidence: /\[MEDIUM_CONFIDENCE:\s*([^\]]+)\]/g,
+    lowConfidence: /\[LOW_CONFIDENCE:\s*([^\]]+)\]/g
   };
   
   const analysis = {
@@ -2047,14 +2059,43 @@ function extractReasoningAnnotations(content) {
     evidence: [],
     inference: [],
     limitation: [],
-    totalAnnotations: 0
+    highConfidence: [],
+    mediumConfidence: [],
+    lowConfidence: [],
+    totalAnnotations: 0,
+    confidenceBreakdown: {
+      high: 0,
+      medium: 0,
+      low: 0
+    }
   };
   
   Object.entries(reasoningPatterns).forEach(([type, pattern]) => {
     const matches = [...content.matchAll(pattern)];
     analysis[type] = matches.map(match => match[1].trim());
     analysis.totalAnnotations += matches.length;
+    
+    // Update confidence breakdown
+    if (type === 'highConfidence') {
+      analysis.confidenceBreakdown.high += matches.length;
+    } else if (type === 'mediumConfidence') {
+      analysis.confidenceBreakdown.medium += matches.length;
+    } else if (type === 'lowConfidence') {
+      analysis.confidenceBreakdown.low += matches.length;
+    }
   });
+  
+  // Calculate overall confidence score
+  const totalConfidenceClaims = analysis.confidenceBreakdown.high + analysis.confidenceBreakdown.medium + analysis.confidenceBreakdown.low;
+  if (totalConfidenceClaims > 0) {
+    analysis.overallConfidence = (
+      (analysis.confidenceBreakdown.high * 0.9 + 
+       analysis.confidenceBreakdown.medium * 0.7 + 
+       analysis.confidenceBreakdown.low * 0.4) / totalConfidenceClaims
+    );
+  } else {
+    analysis.overallConfidence = 0.7; // Default confidence
+  }
   
   return analysis;
 }

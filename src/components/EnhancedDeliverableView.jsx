@@ -110,13 +110,158 @@ const EnhancedDeliverableView = ({
     return matchingChunks;
   };
 
-  // Highlight text in source content - FIXED: Escape regex special characters
-  const highlightTextInSource = (content, query) => {
-    if (!showHighlighting || !query) return content;
+  // Enhanced highlighting with confidence levels and source mapping
+  const highlightTextWithConfidence = (content, query, sourceMapping = {}) => {
+    if (!showHighlighting) return content;
     
-    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`(${escapedQuery})`, 'gi');
-    return content.replace(regex, '<mark class="bg-yellow-200 px-1 rounded">$1</mark>');
+    let highlightedContent = content;
+    
+    // Color coding based on confidence and source type
+    const highlightPatterns = [
+      {
+        pattern: /\[REASONING:\s*([^\]]+)\]/g,
+        className: 'bg-blue-100 text-blue-800 border-l-4 border-blue-400 px-2 py-1 rounded',
+        icon: '🧠',
+        tooltip: 'AI Reasoning'
+      },
+      {
+        pattern: /\[EVIDENCE:\s*([^\]]+)\]/g,
+        className: 'bg-green-100 text-green-800 border-l-4 border-green-400 px-2 py-1 rounded',
+        icon: '📊',
+        tooltip: 'Source Evidence'
+      },
+      {
+        pattern: /\[INFERENCE:\s*([^\]]+)\]/g,
+        className: 'bg-purple-100 text-purple-800 border-l-4 border-purple-400 px-2 py-1 rounded',
+        icon: '💡',
+        tooltip: 'Derived Insight'
+      },
+      {
+        pattern: /\[LIMITATION:\s*([^\]]+)\]/g,
+        className: 'bg-yellow-100 text-yellow-800 border-l-4 border-yellow-400 px-2 py-1 rounded',
+        icon: '⚠️',
+        tooltip: 'Acknowledged Limitation'
+      },
+      {
+        pattern: /\[HIGH_CONFIDENCE:\s*([^\]]+)\]/g,
+        className: 'bg-emerald-100 text-emerald-800 border-l-4 border-emerald-400 px-2 py-1 rounded font-semibold',
+        icon: '✅',
+        tooltip: 'High Confidence (>80%)'
+      },
+      {
+        pattern: /\[MEDIUM_CONFIDENCE:\s*([^\]]+)\]/g,
+        className: 'bg-orange-100 text-orange-800 border-l-4 border-orange-400 px-2 py-1 rounded',
+        icon: '🟡',
+        tooltip: 'Medium Confidence (60-80%)'
+      },
+      {
+        pattern: /\[LOW_CONFIDENCE:\s*([^\]]+)\]/g,
+        className: 'bg-red-100 text-red-800 border-l-4 border-red-400 px-2 py-1 rounded italic',
+        icon: '❌',
+        tooltip: 'Low Confidence (<60%)'
+      }
+    ];
+
+    // Apply highlighting patterns
+    highlightPatterns.forEach(({ pattern, className, icon, tooltip }) => {
+      highlightedContent = highlightedContent.replace(pattern, (match, content) => {
+        return `<span class="${className} inline-block my-1" title="${tooltip}">${icon} ${content}</span>`;
+      });
+    });
+
+    // Highlight source citations with confidence indicators
+    if (sourceMapping && Object.keys(sourceMapping).length > 0) {
+      Object.entries(sourceMapping).forEach(([phrase, sourceInfo]) => {
+        const confidence = sourceInfo.confidence || 0.7;
+        const sourceName = sourceInfo.source || 'Unknown';
+        
+        let confidenceClass = 'bg-gray-100 text-gray-800';
+        let confidenceIcon = '📄';
+        
+        if (confidence >= 0.8) {
+          confidenceClass = 'bg-emerald-100 text-emerald-800';
+          confidenceIcon = '✅';
+        } else if (confidence >= 0.6) {
+          confidenceClass = 'bg-orange-100 text-orange-800';
+          confidenceIcon = '🟡';
+        } else {
+          confidenceClass = 'bg-red-100 text-red-800';
+          confidenceIcon = '❌';
+        }
+        
+        const escapedPhrase = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(${escapedPhrase})`, 'gi');
+        highlightedContent = highlightedContent.replace(regex, 
+          `<span class="${confidenceClass} border-l-4 border-gray-400 px-1 rounded cursor-help" title="Source: ${sourceName} (${Math.round(confidence * 100)}% confidence)">$1 ${confidenceIcon}</span>`
+        );
+      });
+    }
+
+    // Highlight query terms
+    if (query) {
+      const queryTerms = query.toLowerCase().split(' ').filter(term => term.length > 3);
+      queryTerms.forEach(term => {
+        const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(${escapedTerm})`, 'gi');
+        highlightedContent = highlightedContent.replace(regex, 
+          '<mark class="bg-blue-200 px-1 rounded font-medium">$1</mark>'
+        );
+      });
+    }
+
+    return highlightedContent;
+  };
+
+  // Enhanced source attribution with confidence scoring
+  const getSourceConfidence = (source) => {
+    const sourceChunks = getSourceChunks(source.name);
+    if (sourceChunks.length === 0) return 0.5;
+    
+    // Calculate average relevance score
+    const avgScore = sourceChunks.reduce((sum, chunk) => sum + (chunk.score || 0.5), 0) / sourceChunks.length;
+    return Math.min(avgScore, 1.0);
+  };
+
+  // Interactive annotation system
+  const [selectedAnnotation, setSelectedAnnotation] = useState(null);
+
+  const AnnotationTooltip = ({ annotation, onClose }) => {
+    if (!annotation) return null;
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6 max-w-md mx-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">{annotation.type}</h3>
+            <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+              ✕
+            </button>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <strong>Content:</strong>
+              <p className="text-gray-700 mt-1">{annotation.content}</p>
+            </div>
+            {annotation.source && (
+              <div>
+                <strong>Source:</strong>
+                <p className="text-gray-700 mt-1">{annotation.source}</p>
+              </div>
+            )}
+            {annotation.confidence && (
+              <div>
+                <strong>Confidence:</strong>
+                <p className="text-gray-700 mt-1">{Math.round(annotation.confidence * 100)}%</p>
+              </div>
+            )}
+            <div>
+              <strong>Explanation:</strong>
+              <p className="text-gray-700 mt-1">{annotation.explanation}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const DeliverablePanel = () => (
@@ -287,7 +432,10 @@ const EnhancedDeliverableView = ({
                               <div 
                                 className="italic"
                                 dangerouslySetInnerHTML={{
-                                  __html: highlightTextInSource(chunk.content, source.keyPhrase)
+                                  __html: highlightTextWithConfidence(chunk.content, source.keyPhrase, {
+                                    source: source.name,
+                                    confidence: getSourceConfidence(source)
+                                  })
                                 }}
                               />
                             </div>
@@ -438,6 +586,14 @@ const EnhancedDeliverableView = ({
         <ReasoningPanel 
           reasoning={reasoning}
           thoughtProcess={thoughtProcess}
+        />
+      )}
+
+      {/* Annotation Tooltip */}
+      {selectedAnnotation && (
+        <AnnotationTooltip 
+          annotation={selectedAnnotation}
+          onClose={() => setSelectedAnnotation(null)}
         />
       )}
     </div>
