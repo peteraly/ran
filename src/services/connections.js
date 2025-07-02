@@ -245,7 +245,9 @@ export const processRagQuery = async (query, chunks, sources, deliverableType = 
       sourceDiversity: data.sourceDiversity || null,
       reasoning: data.reasoning || null,
       thoughtProcess: data.thoughtProcess || null,
-      retrievedChunks: data.retrievedChunks || []
+      retrievedChunks: data.retrievedChunks || [],
+      qualityValidation: data.qualityValidation || null,
+      styleGuideUsed: data.styleGuideUsed || null
     };
   } catch (error) {
     console.error('❌ RAG processing failed:', error);

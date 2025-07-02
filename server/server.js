@@ -14,9 +14,15 @@ const { OpenAI } = require('openai');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const { EnhancedRAG } = require('./enhancedRAG');
 const SourceDiversityAnalyzer = require('./sourceDiversityAnalyzer');
+const WritingStyleGuide = require('./writingStyleGuide');
+const EnhancedDocumentProcessor = require('./enhancedDocumentProcessor');
 
 // Initialize source diversity analyzer
 const sourceDiversityAnalyzer = new SourceDiversityAnalyzer();
+
+// Initialize style guide and document processor
+const writingStyleGuide = new WritingStyleGuide();
+const enhancedDocumentProcessor = new EnhancedDocumentProcessor();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -1111,7 +1117,7 @@ app.get('/api/scrape', async (req, res) => {
 // Initialize Enhanced RAG system
 const enhancedRAG = new EnhancedRAG();
 
-// File Upload and Processing - FIXED: Added file size validation
+// File Upload and Processing - Enhanced for large documents
 app.post('/api/upload', upload.array('files'), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
@@ -1121,13 +1127,13 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
       });
     }
     
-    // Validate file sizes
-    const maxFileSize = 10 * 1024 * 1024; // 10MB
+    // Validate file sizes - increased limit for large documents
+    const maxFileSize = 50 * 1024 * 1024; // 50MB for large documents
     for (const file of req.files) {
       if (file.size > maxFileSize) {
         return res.status(400).json({
           success: false,
-          error: `File ${file.originalname} exceeds maximum size of 10MB`
+          error: `File ${file.originalname} exceeds maximum size of 50MB`
         });
       }
     }
@@ -1152,60 +1158,87 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
         console.log('Sanitized filename for Pinecone:', sanitizedFilename);
         
         let content = '';
-        if (file.mimetype === 'application/pdf') {
-          // PDF parsing
-          const pdfData = await pdfParse(file.buffer);
-          content = pdfData.text;
-          if (!content || content.trim().length === 0) {
-            throw new Error('No text could be extracted from the PDF. The file may be scanned or image-based.');
-          }
-        } else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-          // DOCX parsing
-          const docxData = await mammoth.extractRawText({ buffer: file.buffer });
-          content = docxData.value;
-        } else if (file.mimetype.startsWith('text/')) {
-          content = file.buffer.toString('utf-8');
-        } else {
-          throw new Error('Unsupported file type');
-        }
-
-        // Chunk content (keep existing chunking for backward compatibility)
-        const chunkSize = 1000;
-        const overlap = 200;
-        const chunks = [];
-        let i = 0;
-        while (i < content.length) {
-          const chunkText = content.slice(i, i + chunkSize);
-          chunks.push({
-            id: `${sanitizedFilename}-chunk-${i}`,
-            content: chunkText,
-          });
-          i += chunkSize - overlap;
-        }
-
-        // Enhanced RAG: Store document with summary and full content
-        console.log(`🔄 Enhanced RAG: Processing document "${safeFilename}"`);
-        let enhancedRAGSuccess = false;
+        let chunks = [];
         let documentId = null;
-        try {
-          documentId = await enhancedRAG.storeDocument(content, safeFilename, chunks);
-          enhancedRAGSuccess = true;
-          console.log(`✅ Enhanced RAG: Successfully stored document "${safeFilename}"`);
-        } catch (enhancedRAGError) {
-          console.error('Enhanced RAG storage failed:', enhancedRAGError);
-          console.log('Continuing with legacy chunking...');
-        }
-
-        // Index chunks in Pinecone (optional - continue even if it fails)
-        console.log(`Attempting to index ${chunks.length} chunks for file: ${safeFilename}`);
+        let enhancedRAGSuccess = false;
         let pineconeSuccess = false;
-        try {
-          await indexChunksWithPinecone(chunks, { source: 'local', filename: safeFilename });
-          console.log(`Successfully indexed ${chunks.length} chunks in Pinecone`);
-          pineconeSuccess = true;
-        } catch (pineconeError) {
-          console.error('Pinecone indexing failed:', pineconeError);
-          console.log('Continuing without Pinecone indexing...');
+        
+        // Use enhanced document processor for large files
+        if (file.size > 5 * 1024 * 1024) { // 5MB threshold
+          console.log(`📚 Using enhanced document processor for large file: ${safeFilename}`);
+          
+          try {
+            const processedDoc = await enhancedDocumentProcessor.processLargeDocument(
+              file.buffer, 
+              safeFilename, 
+              file.mimetype
+            );
+            
+            content = processedDoc.content;
+            chunks = processedDoc.chunks;
+            
+            // Enhanced RAG: Store document with summary and full content
+            console.log(`🔄 Enhanced RAG: Processing large document "${safeFilename}"`);
+            try {
+              documentId = await enhancedRAG.storeDocument(content, safeFilename, chunks);
+              enhancedRAGSuccess = true;
+              console.log(`✅ Enhanced RAG: Successfully stored large document "${safeFilename}"`);
+            } catch (enhancedRAGError) {
+              console.error('Enhanced RAG storage failed:', enhancedRAGError);
+              console.log('Continuing with legacy chunking...');
+            }
+            
+            // Index chunks in Pinecone with enhanced metadata
+            console.log(`Attempting to index ${chunks.length} enhanced chunks for file: ${safeFilename}`);
+            try {
+              await indexChunksWithPinecone(chunks, { 
+                source: 'local', 
+                filename: safeFilename,
+                documentType: processedDoc.metadata.structure.type,
+                complexity: processedDoc.metadata.structure.complexity,
+                hasChapters: processedDoc.metadata.structure.hasChapters,
+                chunkingStrategy: processedDoc.metadata.strategy
+              });
+              console.log(`Successfully indexed ${chunks.length} enhanced chunks in Pinecone`);
+              pineconeSuccess = true;
+            } catch (pineconeError) {
+              console.error('Pinecone indexing failed:', pineconeError);
+              console.log('Continuing without Pinecone indexing...');
+            }
+            
+          } catch (enhancedError) {
+            console.error('Enhanced processing failed, falling back to legacy:', enhancedError);
+            // Fall back to legacy processing
+            content = await extractContentLegacy(file.buffer, file.mimetype);
+            chunks = chunkContent(content, safeFilename);
+          }
+          
+        } else {
+          // Use legacy processing for smaller files
+          content = await extractContentLegacy(file.buffer, file.mimetype);
+          chunks = chunkContent(content, safeFilename);
+          
+          // Enhanced RAG: Store document with summary and full content
+          console.log(`🔄 Enhanced RAG: Processing document "${safeFilename}"`);
+          try {
+            documentId = await enhancedRAG.storeDocument(content, safeFilename, chunks);
+            enhancedRAGSuccess = true;
+            console.log(`✅ Enhanced RAG: Successfully stored document "${safeFilename}"`);
+          } catch (enhancedRAGError) {
+            console.error('Enhanced RAG storage failed:', enhancedRAGError);
+            console.log('Continuing with legacy chunking...');
+          }
+          
+          // Index chunks in Pinecone (optional - continue even if it fails)
+          console.log(`Attempting to index ${chunks.length} chunks for file: ${safeFilename}`);
+          try {
+            await indexChunksWithPinecone(chunks, { source: 'local', filename: safeFilename });
+            console.log(`Successfully indexed ${chunks.length} chunks in Pinecone`);
+            pineconeSuccess = true;
+          } catch (pineconeError) {
+            console.error('Pinecone indexing failed:', pineconeError);
+            console.log('Continuing without Pinecone indexing...');
+          }
         }
         
         // Add summary record to contentIndex for dashboard visibility (always do this)
@@ -1221,7 +1254,8 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
             uploadedAt: new Date().toISOString(),
             chunkCount: chunks.length,
             pineconeIndexed: pineconeSuccess,
-            enhancedRAGIndexed: enhancedRAGSuccess
+            enhancedRAGIndexed: enhancedRAGSuccess,
+            isLargeDocument: file.size > 5 * 1024 * 1024
           }
         };
         contentIndex.push(fileRecord);
@@ -1236,7 +1270,8 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
           content: chunks,
           type: file.mimetype,
           error: null,
-          enhancedRAGId: documentId
+          enhancedRAGId: documentId,
+          isLargeDocument: file.size > 5 * 1024 * 1024
         });
       } catch (err) {
         processedFiles.push({
@@ -1250,9 +1285,35 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
     }
     res.json({ success: true, files: processedFiles });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    console.error('File upload error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process uploaded files'
+    });
   }
 });
+
+// Legacy content extraction function
+async function extractContentLegacy(fileBuffer, fileType) {
+  let content = '';
+  if (fileType === 'application/pdf') {
+    // PDF parsing
+    const pdfData = await pdfParse(fileBuffer);
+    content = pdfData.text;
+    if (!content || content.trim().length === 0) {
+      throw new Error('No text could be extracted from the PDF. The file may be scanned or image-based.');
+    }
+  } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+    // DOCX parsing
+    const docxData = await mammoth.extractRawText({ buffer: fileBuffer });
+    content = docxData.value;
+  } else if (fileType.startsWith('text/')) {
+    content = fileBuffer.toString('utf-8');
+  } else {
+    throw new Error('Unsupported file type');
+  }
+  return content;
+}
 
 // Helper function to sanitize filename for ASCII compatibility
 function sanitizeFilename(filename) {
@@ -1929,7 +1990,7 @@ async function generateAnswerWithSources(query, documents, conservativeMode = fa
 // AI-Powered Synthesis for high-quality deliverables with Chain of Thought reasoning
 async function generateAISynthesizedDeliverable(query, retrievedChunks, sources, deliverableType = 'executive_summary') {
   try {
-    console.log(`🤖 Generating AI-synthesized ${deliverableType} deliverable with reasoning...`);
+    console.log(`🤖 Generating AI-synthesized ${deliverableType} deliverable with enhanced style guide...`);
     
     // Prepare context from retrieved chunks
     const contextText = retrievedChunks.map((chunk, index) => 
@@ -1943,77 +2004,30 @@ async function generateAISynthesizedDeliverable(query, retrievedChunks, sources,
       score: chunk.score || 0
     }));
     
-    // Define output format based on deliverable type
-    const formatInstructions = {
-      executive_summary: "Create a concise executive summary (2-3 paragraphs) that synthesizes the key findings into clear, actionable insights. Use bullet points for key takeaways.",
-      detailed_report: "Create a comprehensive report with clear sections: Executive Summary, Key Findings, Analysis, and Recommendations. Include specific data points and examples.",
-      faq: "Create a FAQ-style deliverable addressing the most important questions related to the query. Each answer should be 2-3 sentences with supporting evidence.",
-      slide_deck: "Create content suitable for presentation slides with clear headings, bullet points, and key metrics. Focus on visual-friendly content structure."
-    };
+    // Generate enhanced prompt using writing style guide
+    const enhancedPrompt = writingStyleGuide.generateEnhancedPrompt(query, deliverableType, contextText);
     
-    const formatInstruction = formatInstructions[deliverableType] || formatInstructions.executive_summary;
-    
-    // Enhanced synthesis prompt with Chain of Thought reasoning and confidence scoring
-    const synthesisPrompt = `You are an expert analyst creating a high-quality deliverable based on retrieved document content. Use Chain of Thought reasoning to show your analysis process and include confidence levels for each claim.
-
-QUERY: "${query}"
-
-RETRIEVED CONTENT:
-${contextText}
-
-ANALYSIS PROCESS:
-1. First, analyze the query to understand what information is needed
-2. Review each source to identify relevant information and assess reliability
-3. Synthesize findings into coherent insights with confidence scoring
-4. Structure the response according to the deliverable format
-5. Include reasoning annotations throughout with confidence indicators
-
-INSTRUCTIONS:
-1. Create a ${deliverableType} that directly answers the query
-2. Use Chain of Thought reasoning - explain your thinking process
-3. Include reasoning annotations with confidence levels throughout the text
-4. Synthesize information from the retrieved content into a coherent, natural narrative
-5. Maintain strict source grounding - only use information from the provided content
-6. Include citations [1], [2], etc. to reference specific sources
-7. If information is missing or unclear, acknowledge limitations with reasoning
-8. ${formatInstruction}
-9. Ensure the tone is professional and actionable
-10. Assess confidence levels for each claim based on source quality and evidence strength
-
-REASONING ANNOTATION FORMAT:
-- Use [REASONING: explanation] for key conclusions
-- Use [EVIDENCE: source] for specific data points
-- Use [INFERENCE: logic] for derived insights
-- Use [LIMITATION: constraint] for acknowledged gaps
-- Use [HIGH_CONFIDENCE: claim] for claims with >80% confidence
-- Use [MEDIUM_CONFIDENCE: claim] for claims with 60-80% confidence
-- Use [LOW_CONFIDENCE: claim] for claims with <60% confidence
-
-CONFIDENCE ASSESSMENT CRITERIA:
-- HIGH (>80%): Direct quotes, specific data, multiple corroborating sources
-- MEDIUM (60-80%): Inferred conclusions, single source with good quality
-- LOW (<60%): Assumptions, limited evidence, unclear sources
-
-IMPORTANT: Only use information from the provided content. Do not add external knowledge or assumptions.`;
-
-    // Generate the synthesis using OpenAI with reasoning
+    // Generate the synthesis using OpenAI with enhanced prompt
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content: "You are an expert business analyst who creates clear, accurate, and actionable deliverables based on provided source material. Always use Chain of Thought reasoning and maintain source grounding. Include reasoning annotations to explain your thinking process."
+          content: "You are an expert business analyst who creates clear, accurate, and actionable deliverables based on provided source material. Follow the specific style guide and quality standards provided. Always use Chain of Thought reasoning and maintain source grounding. Include reasoning annotations to explain your thinking process."
         },
         {
           role: "user",
-          content: synthesisPrompt
+          content: enhancedPrompt
         }
       ],
       temperature: 0.3, // Lower temperature for more consistent, grounded output
-      max_tokens: 2000 // Increased for reasoning content
+      max_tokens: 3000 // Increased for enhanced content
     });
 
     const synthesizedContent = completion.choices[0].message.content;
+    
+    // Validate quality using style guide
+    const qualityValidation = writingStyleGuide.validateQuality(synthesizedContent, deliverableType);
     
     // Extract reasoning annotations and create reasoning summary
     const reasoningAnalysis = extractReasoningAnnotations(synthesizedContent);
@@ -2021,7 +2035,7 @@ IMPORTANT: Only use information from the provided content. Do not add external k
     // Extract key insights and metrics
     const insights = await extractKeyInsights(synthesizedContent, retrievedChunks);
     
-    console.log(`✅ AI synthesis completed for ${deliverableType} with reasoning`);
+    console.log(`✅ AI synthesis completed for ${deliverableType} with quality validation:`, qualityValidation);
     
     return {
       content: synthesizedContent,
@@ -2031,8 +2045,10 @@ IMPORTANT: Only use information from the provided content. Do not add external k
       confidence: calculateSynthesisConfidence(retrievedChunks, sources),
       wordCount: synthesizedContent.split(' ').length,
       processingTime: Date.now(),
-      reasoning: reasoningAnalysis, // New field for reasoning analysis
-      thoughtProcess: await extractThoughtProcess(synthesizedContent, query, retrievedChunks)
+      reasoning: reasoningAnalysis,
+      thoughtProcess: await extractThoughtProcess(synthesizedContent, query, retrievedChunks),
+      qualityValidation, // New field for quality assessment
+      styleGuideUsed: deliverableType // Track which style guide was used
     };
     
   } catch (error) {

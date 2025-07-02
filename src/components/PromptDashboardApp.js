@@ -216,6 +216,9 @@ const PromptDashboardApp = () => {
               sourceDiversity={results.sourceDiversity}
               reasoning={results.reasoning}
               thoughtProcess={results.thoughtProcess}
+              qualityValidation={results.qualityValidation}
+              styleGuideUsed={results.styleGuideUsed}
+              deliverableType={deliverableType}
               onDownload={(text) => {
                 const blob = new Blob([text], { type: 'text/plain' });
                 const url = URL.createObjectURL(blob);

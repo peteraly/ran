@@ -22,6 +22,7 @@ import {
 import { Button } from './ui/button';
 import SourceDiversityPanel from './SourceDiversityPanel';
 import ReasoningPanel from './ReasoningPanel';
+import QualityAssessmentPanel from './QualityAssessmentPanel';
 
 const EnhancedDeliverableView = ({ 
   response, 
@@ -31,6 +32,9 @@ const EnhancedDeliverableView = ({
   sourceDiversity = null,
   reasoning = null,
   thoughtProcess = null,
+  qualityValidation = null,
+  styleGuideUsed = null,
+  deliverableType = 'executive_summary',
   onDownload,
   onCopy 
 }) => {
@@ -547,6 +551,15 @@ const EnhancedDeliverableView = ({
           <SourcesPanel />
         )}
       </div>
+
+      {/* Quality Assessment */}
+      {qualityValidation && (
+        <QualityAssessmentPanel 
+          qualityValidation={qualityValidation}
+          styleGuideUsed={styleGuideUsed}
+          deliverableType={deliverableType}
+        />
+      )}
 
       {/* Quality Metrics */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">
