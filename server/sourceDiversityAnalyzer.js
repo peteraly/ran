@@ -231,6 +231,7 @@ class SourceDiversityAnalyzer {
 
   // Identify missing source types based on query
   identifyMissingSourceTypes(sourceBreakdown, query) {
+    // Ensure query is always a string
     const queryLower = (query || '').toString().toLowerCase();
     const missingTypes = [];
     
@@ -306,18 +307,24 @@ class SourceDiversityAnalyzer {
   getSourceDiversitySummary(analysis) {
     const { sourceBreakdown, metrics, confidence } = analysis;
     
+    // Ensure metrics exists and has required properties
+    const totalSources = metrics?.totalSources || 0;
+    const sourceTypes = metrics?.sourceTypes || 0;
+    
     return {
       confidence: Math.round(confidence * 100),
       confidenceLabel: this.getConfidenceLabel(confidence),
       confidenceColor: this.getConfidenceColor(confidence),
-      sourceCount: metrics.totalSources,
-      sourceTypes: metrics.sourceTypes,
-      diversityIndicator: this.getDiversityIndicator(metrics.sourceTypes),
-      sourceBreakdown: Object.entries(sourceBreakdown).map(([type, sources]) => ({
+      sourceCount: totalSources,
+      sourceTypes: sourceTypes,
+      diversityIndicator: this.getDiversityIndicator(sourceTypes),
+      sourceBreakdown: Object.entries(sourceBreakdown || {}).map(([type, sources]) => ({
         type,
         count: sources.length,
-        percentage: Math.round((sources.length / metrics.totalSources) * 100)
-      }))
+        percentage: totalSources > 0 ? Math.round((sources.length / totalSources) * 100) : 0
+      })),
+      warnings: analysis.warnings || [],
+      recommendations: analysis.recommendations || []
     };
   }
 
