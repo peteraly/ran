@@ -2,6 +2,10 @@
 
 A professional, production-ready dashboard that connects to real data sources and provides intelligent content retrieval for prompt generation.
 
+<!-- Vercel deployment: 2025-07-02T04:15:00Z -->
+<!-- Version: 1.0.1 -->
+<!-- Force cache refresh: $(date) -->
+
 ## ✨ Features
 
 ### 🔗 **Real Source Connections**
