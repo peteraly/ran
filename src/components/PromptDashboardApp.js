@@ -20,20 +20,6 @@ const PromptDashboardApp = () => {
   const [availableSources, setAvailableSources] = useState([]);
   const [isLoadingSources, setIsLoadingSources] = useState(true);
 
-  // Mock data for demonstration
-  const mockChunks = [
-    {
-      content: "Visa operates as a trusted bridge, helping connect both platforms and new technologies, including stablecoin-native players, with our global network to provide fair and open access to banking services.",
-      score: 0.89,
-      metadata: { filename: "Visa's role in stablecoins _ Visa.pdf" }
-    },
-    {
-      content: "In 2025, we believe that every institution that moves money will need a stablecoin strategy. As more players in the payments ecosystem explore this powerful new technology, Visa stands ready to help our partners navigate the transformation.",
-      score: 0.87,
-      metadata: { filename: "Visa's role in stablecoins _ Visa.pdf" }
-    }
-  ];
-
   // Fetch available sources from backend
   useEffect(() => {
     const fetchSources = async () => {
@@ -65,7 +51,7 @@ const PromptDashboardApp = () => {
 
     setIsProcessing(true);
     try {
-      const result = await processRagQuery(query, mockChunks, selectedSources, deliverableType);
+      const result = await processRagQuery(query, [], selectedSources, deliverableType);
       setResults(result);
       console.log('Deliverable generated:', result);
     } catch (error) {
@@ -84,7 +70,7 @@ const PromptDashboardApp = () => {
 
     setIsGeneratingMulti(true);
     try {
-      const result = await generateMultiFormatDeliverables(query, mockChunks, selectedSources);
+      const result = await generateMultiFormatDeliverables(query, [], selectedSources);
       setMultiFormatResults(result);
       setShowMultiFormat(true);
       console.log('Multi-format deliverables generated:', result);
@@ -174,7 +160,7 @@ const PromptDashboardApp = () => {
               response={results.summary ? results.summary.join('\n\n') : 'No response available'}
               sources={selectedSources.map(source => ({ name: source, type: 'local' }))}
               confidence={results.confidence || 0.5}
-              retrievedChunks={mockChunks}
+              retrievedChunks={results.retrievedChunks || []}
               sourceDiversity={results.sourceDiversity}
               onDownload={(text) => {
                 const blob = new Blob([text], { type: 'text/plain' });

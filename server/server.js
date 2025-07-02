@@ -559,6 +559,7 @@ app.post('/api/rag/process', async (req, res) => {
       deliverableType: synthesisResult.deliverableType,
       wordCount: synthesisResult.wordCount,
       sourceMapping: synthesisResult.sourceMapping,
+      retrievedChunks: context, // Include the actual retrieved chunks
       sourceDiversity: {
         analysis: diversityAnalysis,
         summary: diversitySummary,
@@ -2125,6 +2126,7 @@ app.post('/api/rag/multi-format', async (req, res) => {
         query,
         sourcesUsed: sources.length,
         processingTime: Date.now(),
+        retrievedChunks: context, // Include the actual retrieved chunks
         sourceDiversity: {
           analysis: diversityAnalysis,
           summary: diversitySummary,
