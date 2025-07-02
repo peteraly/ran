@@ -59,9 +59,9 @@ const EnhancedDeliverableView = ({
 
   // Enhanced response with better citation mapping
   const enhancedResponse = useMemo(() => {
-    if (!response || !sources) return response;
+    if (!response || !sources) return { text: response || '', citations: [] };
 
-    let processedResponse = response;
+    let processedResponse = typeof response === 'string' ? response : (response.text || '');
     const citations = [];
     
     // Create citation mapping
