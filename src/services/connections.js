@@ -232,7 +232,7 @@ export const processRagQuery = async (query, chunks, sources, deliverableType = 
     console.log('✅ RAG processing completed:', data);
     
     return {
-      success: true,
+      success: data.success,
       summary: data.summary || [],
       insights: data.insights || [],
       recommendations: data.recommendations || [],
@@ -242,7 +242,7 @@ export const processRagQuery = async (query, chunks, sources, deliverableType = 
       deliverableType: data.deliverableType || 'executive_summary',
       wordCount: data.wordCount || 0,
       sourceMapping: data.sourceMapping || [],
-      diversityAnalysis: data.diversityAnalysis || {}
+      sourceDiversity: data.sourceDiversity || null
     };
   } catch (error) {
     console.error('❌ RAG processing failed:', error);
@@ -303,7 +303,7 @@ export const processRagQueryFallback = async (query, chunks, sources, deliverabl
       deliverableType: deliverableType,
       wordCount: 0,
       sourceMapping: [],
-      diversityAnalysis: {}
+      sourceDiversity: null
     };
 
     if (chunks && chunks.length > 0) {

@@ -104,7 +104,7 @@ const MultiFormatDeliverableView = ({ formats, metadata, onClose }) => {
             <strong>Sources Used:</strong> {metadata.sourcesUsed}
           </div>
           <div className="metadata-item">
-            <strong>Confidence:</strong> {metadata.diversityAnalysis?.confidence || 0}%
+            <strong>Confidence:</strong> {metadata.sourceDiversity?.summary?.confidence || 0}%
           </div>
         </div>
       )}
@@ -131,36 +131,36 @@ const MultiFormatDeliverableView = ({ formats, metadata, onClose }) => {
         </div>
       </div>
 
-      {metadata?.diversityAnalysis && (
+      {metadata?.sourceDiversity && (
         <div className="diversity-panel">
           <h4>📊 Source Diversity Analysis</h4>
           <div className="diversity-metrics">
             <div className="metric">
               <span className="metric-label">Total Sources:</span>
-              <span className="metric-value">{metadata.diversityAnalysis.totalSources}</span>
+              <span className="metric-value">{metadata.sourceDiversity.summary?.sourceCount || 0}</span>
             </div>
             <div className="metric">
               <span className="metric-label">Source Types:</span>
-              <span className="metric-value">{metadata.diversityAnalysis.sourceTypes}</span>
+              <span className="metric-value">{metadata.sourceDiversity.summary?.sourceTypes || 0}</span>
             </div>
           </div>
           
-          {metadata.diversityAnalysis.warnings?.length > 0 && (
+          {metadata.sourceDiversity.warnings?.length > 0 && (
             <div className="warnings">
               <h5>⚠️ Warnings</h5>
               <ul>
-                {metadata.diversityAnalysis.warnings.map((warning, index) => (
+                {metadata.sourceDiversity.warnings.map((warning, index) => (
                   <li key={index}>{warning}</li>
                 ))}
               </ul>
             </div>
           )}
 
-          {metadata.diversityAnalysis.recommendations?.length > 0 && (
+          {metadata.sourceDiversity.recommendations?.length > 0 && (
             <div className="recommendations">
               <h5>💡 Recommendations</h5>
               <ul>
-                {metadata.diversityAnalysis.recommendations.map((rec, index) => (
+                {metadata.sourceDiversity.recommendations.map((rec, index) => (
                   <li key={index}>{rec}</li>
                 ))}
               </ul>

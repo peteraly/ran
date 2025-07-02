@@ -559,12 +559,11 @@ app.post('/api/rag/process', async (req, res) => {
       deliverableType: synthesisResult.deliverableType,
       wordCount: synthesisResult.wordCount,
       sourceMapping: synthesisResult.sourceMapping,
-      diversityAnalysis: {
-        confidence: diversitySummary.confidence,
-        totalSources: diversitySummary.totalSources,
-        sourceTypes: diversitySummary.sourceTypes,
-        warnings: diversitySummary.warnings || [],
-        recommendations: diversitySummary.recommendations || []
+      sourceDiversity: {
+        analysis: diversityAnalysis,
+        summary: diversitySummary,
+        recommendations: diversitySummary.recommendations || [],
+        warnings: diversitySummary.warnings || []
       }
     };
 
@@ -2126,12 +2125,11 @@ app.post('/api/rag/multi-format', async (req, res) => {
         query,
         sourcesUsed: sources.length,
         processingTime: Date.now(),
-        diversityAnalysis: {
-          confidence: diversitySummary.confidence,
-          totalSources: diversitySummary.totalSources,
-          sourceTypes: diversitySummary.sourceTypes,
-          warnings: diversitySummary.warnings || [],
-          recommendations: diversitySummary.recommendations || []
+        sourceDiversity: {
+          analysis: diversityAnalysis,
+          summary: diversitySummary,
+          recommendations: diversitySummary.recommendations || [],
+          warnings: diversitySummary.warnings || []
         }
       }
     };

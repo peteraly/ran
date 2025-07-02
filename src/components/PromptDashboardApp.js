@@ -141,7 +141,7 @@ const PromptDashboardApp = () => {
               sources={selectedSources.map(source => ({ name: source, type: 'local' }))}
               confidence={results.confidence || 0.5}
               retrievedChunks={mockChunks}
-              sourceDiversity={results.diversityAnalysis}
+              sourceDiversity={results.sourceDiversity}
               onDownload={(text) => {
                 const blob = new Blob([text], { type: 'text/plain' });
                 const url = URL.createObjectURL(blob);

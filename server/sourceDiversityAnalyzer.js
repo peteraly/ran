@@ -305,16 +305,32 @@ class SourceDiversityAnalyzer {
 
   // Get source diversity summary for UI
   getSourceDiversitySummary(analysis) {
+    // Ensure analysis exists and has required properties
+    if (!analysis) {
+      return {
+        confidence: 0,
+        confidenceLabel: 'Unknown',
+        confidenceColor: 'bg-gray-100 text-gray-600',
+        sourceCount: 0,
+        sourceTypes: 0,
+        diversityIndicator: { label: 'Unknown', color: 'text-gray-600' },
+        sourceBreakdown: [],
+        warnings: [],
+        recommendations: []
+      };
+    }
+
     const { sourceBreakdown, metrics, confidence } = analysis;
     
     // Ensure metrics exists and has required properties
     const totalSources = metrics?.totalSources || 0;
     const sourceTypes = metrics?.sourceTypes || 0;
+    const safeConfidence = confidence || 0;
     
     return {
-      confidence: Math.round(confidence * 100),
-      confidenceLabel: this.getConfidenceLabel(confidence),
-      confidenceColor: this.getConfidenceColor(confidence),
+      confidence: Math.round(safeConfidence * 100),
+      confidenceLabel: this.getConfidenceLabel(safeConfidence),
+      confidenceColor: this.getConfidenceColor(safeConfidence),
       sourceCount: totalSources,
       sourceTypes: sourceTypes,
       diversityIndicator: this.getDiversityIndicator(sourceTypes),
