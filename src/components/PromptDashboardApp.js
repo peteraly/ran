@@ -137,9 +137,24 @@ const PromptDashboardApp = () => {
         <div className="right-panel">
           {results && (
             <EnhancedDeliverableView
-              results={results}
-              query={query}
-              selectedSources={selectedSources}
+              response={results.summary ? results.summary.join('\n\n') : 'No response available'}
+              sources={selectedSources.map(source => ({ name: source, type: 'local' }))}
+              confidence={results.confidence || 0.5}
+              retrievedChunks={mockChunks}
+              sourceDiversity={results.diversityAnalysis}
+              onDownload={(text) => {
+                const blob = new Blob([text], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'deliverable.txt';
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              onCopy={(text) => {
+                navigator.clipboard.writeText(text);
+                alert('Copied to clipboard!');
+              }}
             />
           )}
           
