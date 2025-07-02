@@ -127,6 +127,23 @@
   text-align: center;
 }
 
+.loading-sources {
+  text-align: center;
+  padding: 20px;
+  color: #6c757d;
+  font-style: italic;
+}
+
+.no-sources {
+  text-align: center;
+  padding: 20px;
+  color: #6c757d;
+  background: #f8f9fa;
+  border: 2px dashed #dee2e6;
+  border-radius: 8px;
+  font-style: italic;
+}
+
 .action-buttons {
   margin-top: 24px;
 }

@@ -14,6 +14,8 @@ const PromptDashboardApp = () => {
   const [multiFormatResults, setMultiFormatResults] = useState(null);
   const [showMultiFormat, setShowMultiFormat] = useState(false);
   const [isGeneratingMulti, setIsGeneratingMulti] = useState(false);
+  const [availableSources, setAvailableSources] = useState([]);
+  const [isLoadingSources, setIsLoadingSources] = useState(true);
 
   // Mock data for demonstration
   const mockChunks = [
@@ -28,6 +30,29 @@ const PromptDashboardApp = () => {
       metadata: { filename: "Visa's role in stablecoins _ Visa.pdf" }
     }
   ];
+
+  // Fetch available sources from backend
+  useEffect(() => {
+    const fetchSources = async () => {
+      try {
+        const response = await fetch('/api/uploaded-files');
+        const data = await response.json();
+        if (data.success && data.files) {
+          // Remove duplicates based on filename
+          const uniqueFiles = data.files.filter((file, index, self) => 
+            index === self.findIndex(f => f.filename === file.filename)
+          );
+          setAvailableSources(uniqueFiles);
+        }
+      } catch (error) {
+        console.error('Error fetching sources:', error);
+      } finally {
+        setIsLoadingSources(false);
+      }
+    };
+
+    fetchSources();
+  }, []);
 
   const handleGenerateDeliverable = async () => {
     if (!query.trim() || selectedSources.length === 0) {
@@ -98,18 +123,24 @@ const PromptDashboardApp = () => {
           <div className="source-selection">
             <h3>📚 Source Selection</h3>
             <div className="source-list">
-              {['Visa\'s role in stablecoins _ Visa.pdf'].map((source) => (
-                <div
-                  key={source}
-                  className={`source-item ${selectedSources.includes(source) ? 'selected' : ''}`}
-                  onClick={() => handleSourceToggle(source)}
-                >
-                  <span className="source-name">{source}</span>
-                  <span className="source-status">
-                    {selectedSources.includes(source) ? '✓ Selected' : 'Click to select'}
-                  </span>
-                </div>
-              ))}
+              {isLoadingSources ? (
+                <div className="loading-sources">Loading available sources...</div>
+              ) : availableSources.length === 0 ? (
+                <div className="no-sources">No sources available. Please upload files first.</div>
+              ) : (
+                availableSources.map((source) => (
+                  <div
+                    key={source.id}
+                    className={`source-item ${selectedSources.includes(source.filename) ? 'selected' : ''}`}
+                    onClick={() => handleSourceToggle(source.filename)}
+                  >
+                    <span className="source-name">{source.filename}</span>
+                    <span className="source-status">
+                      {selectedSources.includes(source.filename) ? '✓ Selected' : 'Click to select'}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
             <p className="source-count">
               {selectedSources.length} source(s) selected
