@@ -1,7 +1,7 @@
 // Connection service for handling real OAuth flows and file processing
 
 // API Configuration
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://ran-1.onrender.com';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://ran-backend-pp3x.onrender.com';
 
 // OAuth Configuration
 const OAUTH_CONFIG = {
@@ -233,7 +233,7 @@ export const processRagQueryFallback = async (query, chunks, sources) => {
     // Simulate processing time
     await new Promise(resolve => setTimeout(resolve, 2000));
     
-    // Generate response based on query content
+    // Generate response based on actual retrieved content instead of hardcoded mock data
     let response = {
       success: true,
       summary: [],
@@ -244,68 +244,65 @@ export const processRagQueryFallback = async (query, chunks, sources) => {
       processingTime: 2000
     };
 
-    if (query.toLowerCase().includes('visa') && query.toLowerCase().includes('stablecoin')) {
+    if (chunks && chunks.length > 0) {
+      // Use actual retrieved content
+      const sourcesList = [...new Set(chunks.map(chunk => chunk.metadata?.filename || chunk.metadata?.source || 'Unknown'))];
+      const avgScore = chunks.reduce((sum, chunk) => sum + (chunk.score || 0), 0) / chunks.length;
+      
       response.summary = [
-        "🏦 **Visa's Stablecoin Strategy Overview**",
+        `Based on analysis of ${chunks.length} relevant content chunks from ${sourcesList.length} source(s):`,
         '',
-        'Based on the uploaded Visa document about stablecoins, here are the key findings:',
+        '**Key Findings from Retrieved Content:**',
+        ...chunks.slice(0, 3).map((chunk, index) => 
+          `• ${chunk.content.substring(0, 150)}${chunk.content.length > 150 ? '...' : ''}`
+        ),
         '',
-        '**Strategic Position:**',
-        '• Visa is actively exploring stablecoin integration for cross-border payments',
-        '• Focus on regulatory compliance and partnership with compliant stablecoin issuers',
-        '• Emphasis on interoperability between traditional banking and digital assets',
-        '',
-        '**Key Initiatives:**',
-        '• Development of stablecoin settlement infrastructure',
-        '• Partnership with regulated stablecoin providers (USDC, EURC)',
-        '• Integration with existing Visa payment networks',
-        '',
-        '**Regulatory Approach:**',
-        '• Commitment to working within existing regulatory frameworks',
-        '• Support for clear stablecoin regulations and oversight',
-        '• Focus on consumer protection and financial stability'
+        `**Source Analysis:**`,
+        `• Content relevance: ${Math.round(avgScore * 100)}%`,
+        `• Sources consulted: ${sourcesList.join(', ')}`,
+        `• Total chunks analyzed: ${chunks.length}`
       ];
       
       response.insights = [
-        'Visa is positioning itself as a bridge between traditional finance and digital assets',
-        'Regulatory compliance is central to Visa\'s stablecoin strategy',
-        'Partnership approach rather than direct stablecoin issuance',
-        'Focus on cross-border payment efficiency and cost reduction'
+        `Analysis completed using ${chunks.length} content chunks`,
+        `Content relevance score: ${Math.round(avgScore * 100)}%`,
+        `Sources analyzed: ${sourcesList.join(', ')}`
       ];
+      
+      if (chunks.length > 0) {
+        const firstChunk = chunks[0];
+        if (firstChunk.content) {
+          response.insights.push(`Primary content focus: ${firstChunk.content.substring(0, 100)}...`);
+        }
+      }
       
       response.recommendations = [
-        'Monitor Visa\'s stablecoin partnership announcements',
-        'Track regulatory developments affecting stablecoin payments',
-        'Consider Visa\'s approach as a model for traditional financial institutions',
-        'Evaluate opportunities in stablecoin payment infrastructure'
+        'Review the retrieved content for accuracy and completeness',
+        'Consider adding additional sources for broader perspective',
+        'Verify key findings against primary source documents'
       ];
       
-      response.confidence = 0.85;
+      // Add specific recommendations based on content
+      if (sourcesList.length === 1) {
+        response.recommendations.unshift('Consider adding diverse sources for balanced analysis');
+      }
+      
+      if (avgScore < 0.7) {
+        response.recommendations.unshift('Content relevance is moderate - consider refining your query');
+      }
+      
+      response.confidence = Math.min(avgScore * 0.8, 0.85); // Cap confidence for fallback
     } else {
-      // Generic response for other queries
+      // No content available
       response.summary = [
-        `Analysis of "${query}" based on ${chunks.length} relevant sources:`,
-        '',
-        '**Key Findings:**',
-        '• Content analysis completed successfully',
-        '• Multiple sources consulted for comprehensive coverage',
-        '• High confidence in the accuracy of findings',
-        '',
-        '**Sources Analyzed:**',
-        ...sources.map(source => `• ${source} (${chunks.filter(c => c.source === source).length} chunks)`)
+        'No relevant content found to analyze.',
+        'Please ensure you have uploaded documents or enabled appropriate data sources.',
+        'Try rephrasing your query or adding more source documents.'
       ];
       
-      response.insights = [
-        'Analysis completed with high confidence level',
-        'Multiple perspectives considered for balanced view',
-        'Recent and relevant information prioritized'
-      ];
-      
-      response.recommendations = [
-        'Continue monitoring developments in this area',
-        'Consider additional sources for comprehensive coverage',
-        'Review findings periodically for updates'
-      ];
+      response.insights = ['No content available for analysis'];
+      response.recommendations = ['Add more source documents for comprehensive analysis'];
+      response.confidence = 0.1;
     }
     
     return response;

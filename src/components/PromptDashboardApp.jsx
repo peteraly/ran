@@ -9,6 +9,7 @@ import RagProcessingPipeline from './RagProcessingPipeline';
 import ChunkPreviewCards from './ChunkPreviewCards';
 import SourceAttribution from './SourceAttribution';
 import EnhancedRAGPanel from './EnhancedRAGPanel';
+import EnhancedDeliverableView from './EnhancedDeliverableView';
 
 function groupSourcesByType(sources) {
   return sources.reduce((acc, src) => {
@@ -56,6 +57,7 @@ export default function PromptDashboardApp({ onClose }) {
   // Enhanced RAG States
   const [activeTab, setActiveTab] = useState('enhanced'); // 'enhanced' or 'classic'
   const [enhancedRAGResult, setEnhancedRAGResult] = useState(null);
+  const [useEnhancedView, setUseEnhancedView] = useState(true); // Toggle between old and new view
 
   useEffect(() => {
     // Deep clone to avoid mutating the imported JSON
@@ -365,28 +367,43 @@ export default function PromptDashboardApp({ onClose }) {
     const breakdown = {};
     
     chunks.forEach(chunk => {
-      const source = chunk.metadata?.source || 'unknown';
-      const filename = chunk.metadata?.filename || 'Unknown Document';
-      
-      if (!breakdown[source]) {
-        breakdown[source] = {
-          name: filename,
-          type: source,
+      const sourceName = chunk.metadata?.filename || chunk.metadata?.source || 'Unknown';
+      if (!breakdown[sourceName]) {
+        breakdown[sourceName] = {
+          name: sourceName,
+          type: chunk.metadata?.source || 'local',
           chunks: 0,
-          contribution: 0
+          score: 0,
+          keyPhrase: extractKeyPhrase(chunk.content),
+          excerpt: chunk.content.substring(0, 200) + '...',
+          url: chunk.metadata?.url
         };
       }
-      
-      breakdown[source].chunks++;
+      breakdown[sourceName].chunks++;
+      breakdown[sourceName].score += chunk.score || 0;
     });
     
-    // Calculate contribution percentages
-    const totalChunks = chunks.length;
-    Object.values(breakdown).forEach(source => {
-      source.contribution = Math.round((source.chunks / totalChunks) * 100);
-    });
+    // Calculate average scores and convert to array
+    return Object.values(breakdown).map(source => ({
+      ...source,
+      score: source.score / source.chunks
+    }));
+  };
+
+  // Helper function to extract key phrases from content
+  const extractKeyPhrase = (content) => {
+    if (!content) return '';
     
-    return Object.values(breakdown);
+    // Extract the first meaningful sentence or phrase
+    const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 10);
+    if (sentences.length > 0) {
+      const firstSentence = sentences[0].trim();
+      // Take first 50 characters or first few words
+      return firstSentence.length > 50 ? firstSentence.substring(0, 50) + '...' : firstSentence;
+    }
+    
+    // Fallback to first 30 characters
+    return content.substring(0, 30) + '...';
   };
 
   const handleChunkSelect = (chunk) => {
@@ -721,12 +738,55 @@ export default function PromptDashboardApp({ onClose }) {
                     </div>
                   ) : ragResponse ? (
                     <div className="space-y-6">
-                      {/* RAG Response with Attribution */}
-                      <SourceAttribution
-                        response={ragResponse.summary?.join('\n\n') || ragResponse.insights?.join('\n\n') || 'Response generated successfully.'}
-                        sources={sourceBreakdown}
-                        confidence={confidence}
-                      />
+                      {/* View Toggle */}
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold">Deliverable Results</h3>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-600">View Mode:</span>
+                          <button
+                            onClick={() => setUseEnhancedView(!useEnhancedView)}
+                            className={`px-3 py-1 text-sm rounded-lg border ${
+                              useEnhancedView 
+                                ? 'bg-blue-600 text-white border-blue-600' 
+                                : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                            }`}
+                          >
+                            {useEnhancedView ? 'Enhanced View' : 'Simple View'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Enhanced Deliverable View */}
+                      {useEnhancedView ? (
+                        <EnhancedDeliverableView
+                          response={ragResponse.summary?.join('\n\n') || ragResponse.insights?.join('\n\n') || 'Response generated successfully.'}
+                          sources={sourceBreakdown}
+                          confidence={confidence}
+                          retrievedChunks={retrievedChunks}
+                          sourceDiversity={ragResponse.sourceDiversity}
+                          onCopy={(text) => {
+                            navigator.clipboard.writeText(text);
+                            // You could add a toast notification here
+                          }}
+                          onDownload={(text) => {
+                            const blob = new Blob([text], { type: 'text/plain' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `deliverable-${new Date().toISOString().split('T')[0]}.txt`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                          }}
+                        />
+                      ) : (
+                        <SourceAttribution
+                          response={ragResponse.summary?.join('\n\n') || ragResponse.insights?.join('\n\n') || 'Response generated successfully.'}
+                          sources={sourceBreakdown}
+                          confidence={confidence}
+                        />
+                      )}
                       
                       {/* Retrieved Chunks */}
                       <ChunkPreviewCards

@@ -48,9 +48,15 @@ class EnhancedRAG {
       // Generate summary for retrieval
       const summary = await this.generateDocumentSummary(documentText, filename);
       
-      // Store full document with sanitized ID
+      // Store full document with sanitized ID - FIXED: Additional safety checks
       const safeFilename = sanitizeFilename(filename);
       const documentId = `doc_${Date.now()}_${safeFilename}`;
+      
+      // Additional safety check for document ID
+      if (!/^[a-zA-Z0-9._-]+$/.test(documentId)) {
+        throw new Error(`Document ID contains non-ASCII characters: ${documentId}`);
+      }
+      
       this.documentStore.set(documentId, {
         id: documentId,
         filename,

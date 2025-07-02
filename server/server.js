@@ -13,6 +13,10 @@ const { index } = require('./pinecone');
 const { OpenAI } = require('openai');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const { EnhancedRAG } = require('./enhancedRAG');
+const SourceDiversityAnalyzer = require('./sourceDiversityAnalyzer');
+
+// Initialize source diversity analyzer
+const sourceDiversityAnalyzer = new SourceDiversityAnalyzer();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -99,7 +103,7 @@ let sourceStats = {
   avgResponseTime: 0
 };
 
-// Activity logging function
+// Activity logging function - FIXED: Added maximum size limit
 const logActivity = (type, source, message, status = 'success') => {
   const activity = {
     id: Date.now(),
@@ -110,7 +114,11 @@ const logActivity = (type, source, message, status = 'success') => {
     time: new Date().toISOString()
   };
   activityLog.unshift(activity);
-  if (activityLog.length > 100) activityLog.pop(); // Keep last 100 activities
+  
+  // Keep only last 100 activities to prevent memory leaks
+  if (activityLog.length > 100) {
+    activityLog = activityLog.slice(0, 100);
+  }
 };
 
 // OAuth Token Exchange
@@ -518,6 +526,10 @@ app.post('/api/rag/process', async (req, res) => {
     
     logActivity('rag', 'all', `RAG processing: "${query}"`, 'processing');
     
+    // Analyze source diversity and calculate enhanced confidence
+    const sourceAnalysis = sourceDiversityAnalyzer.analyzeSourceDiversity(sources, query);
+    const diversitySummary = sourceDiversityAnalyzer.getSourceDiversitySummary(sourceAnalysis);
+    
     // TODO: Integrate with real LLM (OpenAI, Anthropic, etc.)
     // For now, simulate LLM processing with enhanced context analysis
     
@@ -525,12 +537,18 @@ app.post('/api/rag/process', async (req, res) => {
       summary: generateMockSummary(query, context),
       insights: generateMockInsights(query, context),
       recommendations: generateMockRecommendations(query, context),
-      confidence: calculateConfidence(context),
+      confidence: sourceAnalysis.confidence,
       sourcesUsed: context.length,
-      processingTime: Date.now() - startTime
+      processingTime: Date.now() - startTime,
+      sourceDiversity: {
+        analysis: sourceAnalysis,
+        summary: diversitySummary,
+        recommendations: sourceAnalysis.recommendations,
+        warnings: sourceAnalysis.warnings
+      }
     };
     
-    logActivity('rag', 'all', `RAG completed: ${mockLlmResponse.sourcesUsed} sources used`, 'success');
+    logActivity('rag', 'all', `RAG completed: ${mockLlmResponse.sourcesUsed} sources used, confidence: ${Math.round(sourceAnalysis.confidence * 100)}%`, 'success');
     
     res.json({
       success: true,
@@ -595,51 +613,88 @@ app.get('/api/stats', (req, res) => {
 
 // Helper functions for RAG processing
 function generateMockSummary(query, context) {
-  if (query.toLowerCase().includes('stablecoin')) {
-    return [
-      '🇺🇸 U.S. Regulation: New Stablecoin Oversight Act introduced, requiring 100% reserves and real-time attestations.',
-      '💸 Tether Volatility: $1.2B net outflow, peg briefly lost, restored by arbitrage.',
-      '🇪🇺 EU MiCA Enforcement: MiCA now in effect, only USDC/EURC approved, Tether/DAI not approved.',
-      '🌐 Internal Risk: Cross-border corridors using non-compliant stablecoins may face operational halts.',
+  // Use actual retrieved content instead of hardcoded mock data
+  if (context && context.length > 0) {
+    // Extract key information from the actual retrieved chunks
+    const sources = [...new Set(context.map(item => item.metadata?.filename || item.metadata?.source || 'Unknown'))];
+    const avgScore = context.reduce((sum, item) => sum + (item.score || 0), 0) / context.length;
+    
+    // Create a summary based on the actual retrieved content
+    const summary = [
+      `Based on analysis of ${context.length} relevant content chunks from ${sources.length} source(s):`,
+      '',
+      '**Key Findings from Retrieved Content:**',
+      ...context.slice(0, 3).map((chunk, index) => 
+        `• ${chunk.content.substring(0, 150)}${chunk.content.length > 150 ? '...' : ''}`
+      ),
+      '',
+      `**Source Analysis:**`,
+      `• Content relevance: ${Math.round(avgScore * 100)}%`,
+      `• Sources consulted: ${sources.join(', ')}`,
+      `• Total chunks analyzed: ${context.length}`
     ];
+    
+    return summary;
   }
   
+  // Fallback if no context provided
   return [
-    `Based on ${context.length} relevant sources, here are the key findings:`,
-    'Analysis completed with high confidence level',
-    'Sources analyzed: ' + [...new Set(context.map(item => item.source))].join(', '),
-    'Context relevance: ' + (context.reduce((sum, item) => sum + item.score, 0) / context.length * 100).toFixed(0) + '%'
+    'No relevant content found to analyze.',
+    'Please ensure you have uploaded documents or enabled appropriate data sources.',
+    'Try rephrasing your query or adding more source documents.'
   ];
 }
 
 function generateMockInsights(query, context) {
+  if (!context || context.length === 0) {
+    return ['No content available for analysis'];
+  }
+  
+  // Generate insights based on actual retrieved content
   const insights = [
-    'Market volatility increased by 23% in the last quarter',
-    'Regulatory uncertainty is the primary concern for 67% of respondents',
-    'Technology adoption is accelerating across all sectors'
+    `Analysis completed using ${context.length} content chunks`,
+    `Content relevance score: ${Math.round(context.reduce((sum, item) => sum + (item.score || 0), 0) / context.length * 100)}%`,
+    `Sources analyzed: ${[...new Set(context.map(item => item.metadata?.filename || item.metadata?.source || 'Unknown'))].join(', ')}`
   ];
   
-  if (query.toLowerCase().includes('regulation')) {
-    insights.unshift('Regulatory changes are driving market consolidation');
+  // Add content-specific insights if available
+  if (context.length > 0) {
+    const firstChunk = context[0];
+    if (firstChunk.content) {
+      insights.push(`Primary content focus: ${firstChunk.content.substring(0, 100)}...`);
+    }
   }
   
   return insights;
 }
 
 function generateMockRecommendations(query, context) {
+  if (!context || context.length === 0) {
+    return ['Add more source documents for comprehensive analysis'];
+  }
+  
+  // Generate recommendations based on actual content analysis
   const recommendations = [
-    'Monitor regulatory developments closely',
-    'Diversify holdings across compliant options',
-    'Implement real-time risk monitoring systems'
+    'Review the retrieved content for accuracy and completeness',
+    'Consider adding additional sources for broader perspective',
+    'Verify key findings against primary source documents'
   ];
   
-  if (query.toLowerCase().includes('stablecoin')) {
-    recommendations.unshift('Review stablecoin compliance status');
+  // Add specific recommendations based on content
+  const sources = [...new Set(context.map(item => item.metadata?.filename || item.metadata?.source || 'Unknown'))];
+  if (sources.length === 1) {
+    recommendations.unshift('Consider adding diverse sources for balanced analysis');
+  }
+  
+  const avgScore = context.reduce((sum, item) => sum + (item.score || 0), 0) / context.length;
+  if (avgScore < 0.7) {
+    recommendations.unshift('Content relevance is moderate - consider refining your query');
   }
   
   return recommendations;
 }
 
+// Legacy confidence calculation (kept for backward compatibility)
 function calculateConfidence(context) {
   if (context.length === 0) return 0.1;
   
@@ -1037,7 +1092,7 @@ app.get('/api/scrape', async (req, res) => {
 // Initialize Enhanced RAG system
 const enhancedRAG = new EnhancedRAG();
 
-// File Upload and Processing
+// File Upload and Processing - FIXED: Added file size validation
 app.post('/api/upload', upload.array('files'), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
@@ -1046,6 +1101,18 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
         error: 'No files uploaded'
       });
     }
+    
+    // Validate file sizes
+    const maxFileSize = 10 * 1024 * 1024; // 10MB
+    for (const file of req.files) {
+      if (file.size > maxFileSize) {
+        return res.status(400).json({
+          success: false,
+          error: `File ${file.originalname} exceeds maximum size of 10MB`
+        });
+      }
+    }
+    
     const processedFiles = [];
     for (const file of req.files) {
       try {
@@ -1716,7 +1783,10 @@ app.post('/api/enhanced-query', async (req, res) => {
       answer = 'I could not find any relevant documents to answer your question.';
     }
 
-    // Step 7: Prepare response with source analysis
+    // Step 7: Prepare response with source analysis and diversity metrics
+    const sourceAnalysis = sourceDiversityAnalyzer.analyzeSourceDiversity(topDocuments, query);
+    const diversitySummary = sourceDiversityAnalyzer.getSourceDiversitySummary(sourceAnalysis);
+    
     const response = {
       success: true,
       answer,
@@ -1724,13 +1794,27 @@ app.post('/api/enhanced-query', async (req, res) => {
         filename: doc.filename,
         summary: doc.summary,
         relevanceScore: doc.relevanceScore,
-        score: doc.score
+        score: doc.score,
+        type: doc.type || 'local'
       })),
+      confidence: sourceAnalysis.confidence,
+      sourceDiversity: {
+        analysis: sourceAnalysis,
+        summary: diversitySummary,
+        recommendations: sourceAnalysis.recommendations,
+        warnings: sourceAnalysis.warnings
+      },
       metadata: {
         totalDocumentsRetrieved: uniqueDocuments.length,
         queriesUsed: queries,
         hallucinationCheck: hallucinationCheck,
-        enhancedRAGEnabled: useActiveRAG
+        enhancedRAGEnabled: useActiveRAG,
+        sourceTypes: sourceAnalysis.metrics.sourceTypes,
+        primarySources: sourceAnalysis.metrics.primarySources,
+        secondarySources: sourceAnalysis.metrics.secondarySources,
+        regulatorySources: sourceAnalysis.metrics.regulatorySources,
+        competitiveSources: sourceAnalysis.metrics.competitiveSources,
+        technicalSources: sourceAnalysis.metrics.technicalSources
       }
     };
 
