@@ -211,7 +211,7 @@ export const processRagQuery = async (query, chunks, sources, deliverableType = 
   try {
     console.log('🔄 Processing RAG query with AI synthesis:', { query, chunks: chunks?.length, sources, deliverableType });
     
-    const response = await fetch(`${API_BASE_URL}/rag/process`, {
+    const response = await fetch(`${API_BASE_URL}/api/rag/process`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -255,7 +255,7 @@ export const generateMultiFormatDeliverables = async (query, chunks, sources) =>
   try {
     console.log('🔄 Generating multi-format deliverables:', { query, chunks: chunks?.length, sources });
     
-    const response = await fetch(`${API_BASE_URL}/rag/multi-format`, {
+    const response = await fetch(`${API_BASE_URL}/api/rag/multi-format`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
