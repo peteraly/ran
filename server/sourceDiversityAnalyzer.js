@@ -231,7 +231,7 @@ class SourceDiversityAnalyzer {
 
   // Identify missing source types based on query
   identifyMissingSourceTypes(sourceBreakdown, query) {
-    const queryLower = query.toLowerCase();
+    const queryLower = (query || '').toString().toLowerCase();
     const missingTypes = [];
     
     // Check for regulatory sources for compliance-related queries

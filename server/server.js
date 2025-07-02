@@ -28,6 +28,11 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
+    // In production, allow all origins for now (you can restrict this later)
+    if (process.env.NODE_ENV === 'production') {
+      return callback(null, true);
+    }
+    
     // Allow any Vercel domain or localhost
     if (origin.includes('vercel.app') || origin.includes('localhost')) {
       return callback(null, true);
@@ -37,7 +42,10 @@ app.use(cors({
     const allowedOrigins = [
       'http://localhost:3000',
       'http://localhost:3001',
-      'http://localhost:3002'
+      'http://localhost:3002',
+      'https://ran-eight.vercel.app',
+      'https://ran-k39m5tlbt-peteralys-projects.vercel.app',
+      'https://ran-je9o1a21w-peteralys-projects.vercel.app'
     ];
     
     if (allowedOrigins.indexOf(origin) !== -1) {
@@ -536,7 +544,7 @@ app.post('/api/rag/process', async (req, res) => {
     const synthesisResult = await generateAISynthesizedDeliverable(query, context, sources, deliverableType);
     
     // Get source diversity analysis
-    const diversityAnalysis = sourceDiversityAnalyzer.analyzeSources(context, sources);
+    const diversityAnalysis = sourceDiversityAnalyzer.analyzeSourceDiversity(sources, query);
     const diversitySummary = sourceDiversityAnalyzer.getSourceDiversitySummary(diversityAnalysis);
     
     // Prepare response
@@ -1698,14 +1706,6 @@ app.get('/api/enhanced-documents', (req, res) => {
   }
 });
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Endpoint not found'
-  });
-});
-
 // Enhanced RAG Query Endpoint with Active RAG features
 app.post('/api/enhanced-query', async (req, res) => {
   try {
@@ -2116,7 +2116,7 @@ app.post('/api/rag/multi-format', async (req, res) => {
     });
 
     // Get source diversity analysis
-    const diversityAnalysis = sourceDiversityAnalyzer.analyzeSources(context, sources);
+    const diversityAnalysis = sourceDiversityAnalyzer.analyzeSourceDiversity(sources, query);
     const diversitySummary = sourceDiversityAnalyzer.getSourceDiversitySummary(diversityAnalysis);
 
     const response = {
@@ -2153,4 +2153,12 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
   console.log(`🔗 API base: http://localhost:${PORT}/api`);
-}); 
+});
+
+// 404 handler (must be last)
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Endpoint not found'
+  });
+});
