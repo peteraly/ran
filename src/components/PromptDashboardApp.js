@@ -5,6 +5,9 @@ import DeliverableTypeSelector from './DeliverableTypeSelector';
 import MultiFormatDeliverableView from './MultiFormatDeliverableView';
 import './PromptDashboardApp.css';
 
+// API Configuration - same as connections.js
+const API_BASE_URL = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://ran-backend-pp3x.onrender.com');
+
 const PromptDashboardApp = () => {
   const [query, setQuery] = useState('');
   const [selectedSources, setSelectedSources] = useState([]);
@@ -35,7 +38,7 @@ const PromptDashboardApp = () => {
   useEffect(() => {
     const fetchSources = async () => {
       try {
-        const response = await fetch('/api/uploaded-files');
+        const response = await fetch(`${API_BASE_URL}/api/uploaded-files`);
         const data = await response.json();
         if (data.success && data.files) {
           // Remove duplicates based on filename
