@@ -9,3 +9,4 @@ root.render(
     <App />
   </React.StrictMode>
 ); // Cache busting update - Tue Jul  1 23:06:42 EDT 2025
+// Force Vercel rebuild - Tue Jul  1 23:20:26 EDT 2025
