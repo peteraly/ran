@@ -51,7 +51,33 @@ const PromptDashboardApp = () => {
 
     setIsProcessing(true);
     try {
-      const result = await processRagQuery(query, [], selectedSources, deliverableType);
+      // Step 1: Retrieve relevant chunks from Pinecone
+      console.log('🔄 Retrieving chunks from Pinecone...');
+      const retrieveResponse = await fetch(`${API_BASE_URL}/api/retrieve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query,
+          sources: selectedSources,
+          limit: 10
+        }),
+      });
+
+      if (!retrieveResponse.ok) {
+        throw new Error(`Failed to retrieve chunks: ${retrieveResponse.statusText}`);
+      }
+
+      const retrieveData = await retrieveResponse.json();
+      console.log('✅ Retrieved chunks:', retrieveData);
+
+      if (!retrieveData.success) {
+        throw new Error(retrieveData.error || 'Failed to retrieve chunks');
+      }
+
+      // Step 2: Process RAG query with retrieved chunks
+      const result = await processRagQuery(query, retrieveData.chunks, selectedSources, deliverableType);
       setResults(result);
       console.log('Deliverable generated:', result);
     } catch (error) {
@@ -70,7 +96,33 @@ const PromptDashboardApp = () => {
 
     setIsGeneratingMulti(true);
     try {
-      const result = await generateMultiFormatDeliverables(query, [], selectedSources);
+      // Step 1: Retrieve relevant chunks from Pinecone
+      console.log('🔄 Retrieving chunks for multi-format generation...');
+      const retrieveResponse = await fetch(`${API_BASE_URL}/api/retrieve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query,
+          sources: selectedSources,
+          limit: 10
+        }),
+      });
+
+      if (!retrieveResponse.ok) {
+        throw new Error(`Failed to retrieve chunks: ${retrieveResponse.statusText}`);
+      }
+
+      const retrieveData = await retrieveResponse.json();
+      console.log('✅ Retrieved chunks for multi-format:', retrieveData);
+
+      if (!retrieveData.success) {
+        throw new Error(retrieveData.error || 'Failed to retrieve chunks');
+      }
+
+      // Step 2: Generate multi-format deliverables with retrieved chunks
+      const result = await generateMultiFormatDeliverables(query, retrieveData.chunks, selectedSources);
       setMultiFormatResults(result);
       setShowMultiFormat(true);
       console.log('Multi-format deliverables generated:', result);
