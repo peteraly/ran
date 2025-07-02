@@ -8,4 +8,4 @@ function App() {
   );
 }
 
-export default App; 
+export default App; // Force Vercel rebuild - Tue Jul  1 23:05:15 EDT 2025
