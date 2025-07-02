@@ -86,10 +86,23 @@ const EnhancedDeliverableView = ({
 
   // Find relevant chunks for a specific source
   const getSourceChunks = (sourceName) => {
-    return retrievedChunks.filter(chunk => 
-      chunk.metadata?.filename === sourceName || 
-      chunk.metadata?.source === sourceName
-    );
+    console.log('🔍 Looking for chunks for source:', sourceName);
+    console.log('🔍 Available chunks:', retrievedChunks);
+    
+    const matchingChunks = retrievedChunks.filter(chunk => {
+      // Match by filename in metadata (from Pinecone)
+      const chunkFilename = chunk.metadata?.filename;
+      // Match by source name (from frontend)
+      const chunkSource = chunk.metadata?.source;
+      
+      const matches = chunkFilename === sourceName || chunkSource === sourceName;
+      console.log(`🔍 Chunk ${chunk.id}: filename="${chunkFilename}", source="${chunkSource}", matches=${matches}`);
+      
+      return matches;
+    });
+    
+    console.log(`🔍 Found ${matchingChunks.length} chunks for source: ${sourceName}`);
+    return matchingChunks;
   };
 
   // Highlight text in source content - FIXED: Escape regex special characters
