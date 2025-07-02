@@ -560,6 +560,8 @@ app.post('/api/rag/process', async (req, res) => {
       wordCount: synthesisResult.wordCount,
       sourceMapping: synthesisResult.sourceMapping,
       retrievedChunks: context, // Include the actual retrieved chunks
+      reasoning: synthesisResult.reasoning, // Include reasoning analysis
+      thoughtProcess: synthesisResult.thoughtProcess, // Include thought process
       sourceDiversity: {
         analysis: diversityAnalysis,
         summary: diversitySummary,
@@ -1924,10 +1926,10 @@ async function generateAnswerWithSources(query, documents, conservativeMode = fa
   }
 }
 
-// AI-Powered Synthesis for high-quality deliverables
+// AI-Powered Synthesis for high-quality deliverables with Chain of Thought reasoning
 async function generateAISynthesizedDeliverable(query, retrievedChunks, sources, deliverableType = 'executive_summary') {
   try {
-    console.log(`🤖 Generating AI-synthesized ${deliverableType} deliverable...`);
+    console.log(`🤖 Generating AI-synthesized ${deliverableType} deliverable with reasoning...`);
     
     // Prepare context from retrieved chunks
     const contextText = retrievedChunks.map((chunk, index) => 
@@ -1951,32 +1953,47 @@ async function generateAISynthesizedDeliverable(query, retrievedChunks, sources,
     
     const formatInstruction = formatInstructions[deliverableType] || formatInstructions.executive_summary;
     
-    // Create the synthesis prompt
-    const synthesisPrompt = `You are an expert analyst creating a high-quality deliverable based on retrieved document content.
+    // Enhanced synthesis prompt with Chain of Thought reasoning
+    const synthesisPrompt = `You are an expert analyst creating a high-quality deliverable based on retrieved document content. Use Chain of Thought reasoning to show your analysis process.
 
 QUERY: "${query}"
 
 RETRIEVED CONTENT:
 ${contextText}
 
+ANALYSIS PROCESS:
+1. First, analyze the query to understand what information is needed
+2. Review each source to identify relevant information
+3. Synthesize findings into coherent insights
+4. Structure the response according to the deliverable format
+5. Include reasoning annotations throughout
+
 INSTRUCTIONS:
 1. Create a ${deliverableType} that directly answers the query
-2. Synthesize information from the retrieved content into a coherent, natural narrative
-3. Maintain strict source grounding - only use information from the provided content
-4. Include citations [1], [2], etc. to reference specific sources
-5. If information is missing or unclear, acknowledge limitations
-6. ${formatInstruction}
-7. Ensure the tone is professional and actionable
+2. Use Chain of Thought reasoning - explain your thinking process
+3. Include reasoning annotations like [REASONING: This conclusion is based on...] throughout the text
+4. Synthesize information from the retrieved content into a coherent, natural narrative
+5. Maintain strict source grounding - only use information from the provided content
+6. Include citations [1], [2], etc. to reference specific sources
+7. If information is missing or unclear, acknowledge limitations with reasoning
+8. ${formatInstruction}
+9. Ensure the tone is professional and actionable
+
+REASONING ANNOTATION FORMAT:
+- Use [REASONING: explanation] for key conclusions
+- Use [EVIDENCE: source] for specific data points
+- Use [INFERENCE: logic] for derived insights
+- Use [LIMITATION: constraint] for acknowledged gaps
 
 IMPORTANT: Only use information from the provided content. Do not add external knowledge or assumptions.`;
 
-    // Generate the synthesis using OpenAI
+    // Generate the synthesis using OpenAI with reasoning
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content: "You are an expert business analyst who creates clear, accurate, and actionable deliverables based on provided source material. Always maintain source grounding and cite your sources."
+          content: "You are an expert business analyst who creates clear, accurate, and actionable deliverables based on provided source material. Always use Chain of Thought reasoning and maintain source grounding. Include reasoning annotations to explain your thinking process."
         },
         {
           role: "user",
@@ -1984,15 +2001,18 @@ IMPORTANT: Only use information from the provided content. Do not add external k
         }
       ],
       temperature: 0.3, // Lower temperature for more consistent, grounded output
-      max_tokens: 1500
+      max_tokens: 2000 // Increased for reasoning content
     });
 
     const synthesizedContent = completion.choices[0].message.content;
     
+    // Extract reasoning annotations and create reasoning summary
+    const reasoningAnalysis = extractReasoningAnnotations(synthesizedContent);
+    
     // Extract key insights and metrics
     const insights = await extractKeyInsights(synthesizedContent, retrievedChunks);
     
-    console.log(`✅ AI synthesis completed for ${deliverableType}`);
+    console.log(`✅ AI synthesis completed for ${deliverableType} with reasoning`);
     
     return {
       content: synthesizedContent,
@@ -2001,13 +2021,75 @@ IMPORTANT: Only use information from the provided content. Do not add external k
       deliverableType,
       confidence: calculateSynthesisConfidence(retrievedChunks, sources),
       wordCount: synthesizedContent.split(' ').length,
-      processingTime: Date.now()
+      processingTime: Date.now(),
+      reasoning: reasoningAnalysis, // New field for reasoning analysis
+      thoughtProcess: await extractThoughtProcess(synthesizedContent, query, retrievedChunks)
     };
     
   } catch (error) {
     console.error('Error in AI synthesis:', error);
     // Fallback to chunk-based approach
     return generateChunkBasedDeliverable(query, retrievedChunks, sources);
+  }
+}
+
+// Extract reasoning annotations from synthesized content
+function extractReasoningAnnotations(content) {
+  const reasoningPatterns = {
+    reasoning: /\[REASONING:\s*([^\]]+)\]/g,
+    evidence: /\[EVIDENCE:\s*([^\]]+)\]/g,
+    inference: /\[INFERENCE:\s*([^\]]+)\]/g,
+    limitation: /\[LIMITATION:\s*([^\]]+)\]/g
+  };
+  
+  const analysis = {
+    reasoning: [],
+    evidence: [],
+    inference: [],
+    limitation: [],
+    totalAnnotations: 0
+  };
+  
+  Object.entries(reasoningPatterns).forEach(([type, pattern]) => {
+    const matches = [...content.matchAll(pattern)];
+    analysis[type] = matches.map(match => match[1].trim());
+    analysis.totalAnnotations += matches.length;
+  });
+  
+  return analysis;
+}
+
+// Extract the AI's thought process and reasoning chain
+async function extractThoughtProcess(content, query, chunks) {
+  try {
+    const thoughtProcessPrompt = `Analyze this AI-generated content and extract the logical reasoning chain. Identify:
+
+1. How the AI approached the query
+2. What evidence was used from each source
+3. How conclusions were drawn
+4. What limitations were acknowledged
+5. The overall reasoning flow
+
+Content: ${content}
+Query: ${query}
+Sources: ${chunks.length} chunks
+
+Provide a structured analysis of the AI's thought process:`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "You analyze AI reasoning patterns and extract logical thought processes." },
+        { role: "user", content: thoughtProcessPrompt }
+      ],
+      temperature: 0.2,
+      max_tokens: 800
+    });
+
+    return completion.choices[0].message.content;
+  } catch (error) {
+    console.error('Error extracting thought process:', error);
+    return 'Thought process analysis unavailable';
   }
 }
 

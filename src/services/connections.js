@@ -242,7 +242,10 @@ export const processRagQuery = async (query, chunks, sources, deliverableType = 
       deliverableType: data.deliverableType || 'executive_summary',
       wordCount: data.wordCount || 0,
       sourceMapping: data.sourceMapping || [],
-      sourceDiversity: data.sourceDiversity || null
+      sourceDiversity: data.sourceDiversity || null,
+      reasoning: data.reasoning || null,
+      thoughtProcess: data.thoughtProcess || null,
+      retrievedChunks: data.retrievedChunks || []
     };
   } catch (error) {
     console.error('❌ RAG processing failed:', error);

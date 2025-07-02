@@ -16,10 +16,12 @@ import {
   BookOpen,
   Quote,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Brain
 } from 'lucide-react';
 import { Button } from './ui/button';
 import SourceDiversityPanel from './SourceDiversityPanel';
+import ReasoningPanel from './ReasoningPanel';
 
 const EnhancedDeliverableView = ({ 
   response, 
@@ -27,6 +29,8 @@ const EnhancedDeliverableView = ({
   confidence, 
   retrievedChunks = [],
   sourceDiversity = null,
+  reasoning = null,
+  thoughtProcess = null,
   onDownload,
   onCopy 
 }) => {
@@ -34,6 +38,7 @@ const EnhancedDeliverableView = ({
   const [showHighlighting, setShowHighlighting] = useState(true);
   const [selectedSource, setSelectedSource] = useState(null);
   const [viewMode, setViewMode] = useState('split'); // 'split', 'deliverable', 'sources'
+  const [showReasoning, setShowReasoning] = useState(true);
 
   const getSourceIcon = (source) => {
     switch (source.type) {
@@ -363,6 +368,22 @@ const EnhancedDeliverableView = ({
             </button>
           </div>
         </div>
+        
+        {/* Reasoning Toggle */}
+        {(reasoning || thoughtProcess) && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">AI Reasoning:</span>
+            <Button
+              variant={showReasoning ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowReasoning(!showReasoning)}
+              className="flex items-center gap-2"
+            >
+              <Brain className="w-4 h-4" />
+              {showReasoning ? 'Hide' : 'Show'} Analysis
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Content Area */}
@@ -409,6 +430,14 @@ const EnhancedDeliverableView = ({
         <SourceDiversityPanel 
           sourceDiversity={sourceDiversity} 
           confidence={confidence} 
+        />
+      )}
+
+      {/* Reasoning Analysis */}
+      {showReasoning && (
+        <ReasoningPanel 
+          reasoning={reasoning}
+          thoughtProcess={thoughtProcess}
         />
       )}
     </div>
