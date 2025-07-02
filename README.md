@@ -78,6 +78,8 @@ GOOGLE_CLIENT_SECRET=your_google_client_secret
 MICROSOFT_CLIENT_SECRET=your_microsoft_client_secret
 NOTION_CLIENT_SECRET=your_notion_client_secret
 OPENAI_API_KEY=your_openai_api_key
+PINECONE_API_KEY=your_pinecone_api_key
+PINECONE_INDEX_NAME=your_pinecone_index_name
 ```
 
 ## 🔧 OAuth Setup
@@ -252,3 +254,5 @@ MIT License - see LICENSE file for details
 
 **Built with ❤️ for professional productivity** # Trigger deployment
 # Production deployment update - Tue Jul  1 23:00:36 EDT 2025
+
+<!-- Deployment timestamp: 2025-07-02T03:25:00Z -->
