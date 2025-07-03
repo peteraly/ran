@@ -9,6 +9,57 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const path = require('path');
 require('dotenv').config();
+
+// Enhanced error handling and monitoring
+const process = require('process');
+
+// Global error handlers
+process.on('uncaughtException', (error) => {
+  console.error('🚨 Uncaught Exception:', error);
+  // Log to file in production
+  if (process.env.NODE_ENV === 'production') {
+    require('fs').appendFileSync('error.log', `${new Date().toISOString()}: ${error.stack}\n`);
+  }
+  // Don't exit immediately, try to recover
+  setTimeout(() => {
+    console.log('🔄 Attempting to recover from uncaught exception...');
+  }, 1000);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🚨 Unhandled Rejection at:', promise, 'reason:', reason);
+  // Log to file in production
+  if (process.env.NODE_ENV === 'production') {
+    require('fs').appendFileSync('error.log', `${new Date().toISOString()}: Unhandled Rejection: ${reason}\n`);
+  }
+});
+
+// Memory monitoring
+const monitorMemory = () => {
+  const memUsage = process.memoryUsage();
+  const memMB = {
+    rss: Math.round(memUsage.rss / 1024 / 1024),
+    heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
+    heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
+    external: Math.round(memUsage.external / 1024 / 1024)
+  };
+  
+  // Warning if memory usage is high
+  if (memMB.heapUsed > 500) { // 500MB threshold
+    console.warn(`⚠️ High memory usage: ${memMB.heapUsed}MB heap used`);
+    // Force garbage collection if available
+    if (global.gc) {
+      global.gc();
+      console.log('🧹 Forced garbage collection');
+    }
+  }
+  
+  return memMB;
+};
+
+// Monitor memory every 30 seconds
+setInterval(monitorMemory, 30000);
+
 const { index } = require('./pinecone');
 const { OpenAI } = require('openai');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -997,12 +1048,45 @@ async function syncGeneric(provider, tokens, config) { return { provider, status
 
 // Health check
 app.get('/api/health', (req, res) => {
+  const memUsage = monitorMemory();
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    contentIndexSize: contentIndex.length
+    uptime: process.uptime(),
+    memory: memUsage,
+    version: '2.0.0',
+    environment: process.env.NODE_ENV || 'development'
   });
 });
+
+// Graceful shutdown handling
+const gracefulShutdown = (signal) => {
+  console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
+  
+  // Stop accepting new requests
+  server.close(() => {
+    console.log('✅ HTTP server closed');
+    
+    // Clean up resources
+    if (global.gc) {
+      global.gc();
+      console.log('🧹 Final garbage collection completed');
+    }
+    
+    console.log('✅ Graceful shutdown completed');
+    process.exit(0);
+  });
+  
+  // Force shutdown after 10 seconds
+  setTimeout(() => {
+    console.error('⚠️ Forced shutdown after timeout');
+    process.exit(1);
+  }, 10000);
+};
+
+// Listen for shutdown signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Database Connection Test
 app.post('/api/database/test', async (req, res) => {

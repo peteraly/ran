@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Terminal, Command, Sparkles, FileText, BarChart3, Table, Search, Database, Globe2, Mail, CheckCircle, Clock, AlertCircle, Brain, Zap, X } from 'lucide-react';
+import { Terminal, Command, Sparkles, FileText, BarChart3, Table, Search, Database, Globe2, Mail, CheckCircle, Clock, AlertCircle, Brain, Zap, X, RefreshCw } from 'lucide-react';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import SourcePanel from './SourcePanel';
-import AddSourceModal from './AddSourceModal';
 import sourceRegistry from '../data/source_registry.json';
 import { retrieveRelevantContent, processRagQuery, processUploadedFiles, processRagQueryFallback } from '../services/connections';
 import RagProcessingPipeline from './RagProcessingPipeline';
@@ -11,6 +10,7 @@ import ChunkPreviewCards from './ChunkPreviewCards';
 import SourceAttribution from './SourceAttribution';
 import EnhancedRAGPanel from './EnhancedRAGPanel';
 import EnhancedDeliverableView from './EnhancedDeliverableView';
+import SystemStatusPanel from './SystemStatusPanel';
 
 function groupSourcesByType(sources) {
   return sources.reduce((acc, src) => {
@@ -39,7 +39,6 @@ export default function PromptDashboardApp({ onClose }) {
   const [selectedDeliverableType, setSelectedDeliverableType] = useState(null);
   const commandBarRef = useRef(null);
   const [localFiles, setLocalFiles] = useState([]);
-  const [showAddSourceModal, setShowAddSourceModal] = useState(false);
 
   // RAG Processing States
   const [processingStage, setProcessingStage] = useState(null);
@@ -585,53 +584,6 @@ export default function PromptDashboardApp({ onClose }) {
     );
   };
 
-  const handleAddSource = async (type, metadata = {}) => {
-    try {
-      if (type === 'local' && metadata.files) {
-        // Process uploaded files
-        const processedFiles = await processUploadedFiles(metadata.files);
-        
-        // Refresh the sources list to include the new files
-        const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://ran-backend-pp3x.onrender.com'}/api/uploaded-files`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success) {
-            // Convert uploaded files to source format for sidebar
-            const uploadedSources = data.files.map((file, index) => ({
-              id: `uploaded_${index}`,
-              type: 'local',
-              title: file.filename,
-              subject: file.filename,
-              from: 'Uploaded File',
-              date: new Date(file.uploadedAt).toLocaleDateString(),
-              used: false,
-              chunks: file.chunks,
-              source: 'local',
-              metadata: {
-                filename: file.filename,
-                source: 'local',
-                chunks: file.chunks,
-                size: file.size,
-                type: file.type
-              }
-            }));
-            
-            // Add uploaded files to sources
-            setSources(prev => {
-              const existingSources = prev.filter(s => s.type !== 'local');
-              return [...existingSources, ...uploadedSources];
-            });
-            
-            setLocalFiles(data.files);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error adding source:', error);
-      alert(`Failed to add source: ${error.message}`);
-    }
-  };
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl h-full max-h-[90vh] flex flex-col">
@@ -688,7 +640,7 @@ export default function PromptDashboardApp({ onClose }) {
               <SourcePanel
                 sources={sources}
                 onSourceToggle={internetSearch ? undefined : handleToggleUsed}
-                onAddSource={() => setShowAddSourceModal(true)}
+                onAddSource={() => {}}
               />
               <div className="p-4">
                 <button
@@ -706,12 +658,22 @@ export default function PromptDashboardApp({ onClose }) {
             {activeTab === 'enhanced' ? (
               // Enhanced RAG Interface
               <div className="flex-1 overflow-y-auto p-6">
-                <EnhancedRAGPanel 
-                  onQuerySubmit={(result) => {
-                    setEnhancedRAGResult(result);
-                    console.log('Enhanced RAG result:', result);
-                  }}
-                />
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Main RAG Panel */}
+                  <div className="lg:col-span-2">
+                    <EnhancedRAGPanel 
+                      onQuerySubmit={(result) => {
+                        setEnhancedRAGResult(result);
+                        console.log('Enhanced RAG result:', result);
+                      }}
+                    />
+                  </div>
+                  
+                  {/* System Status Panel */}
+                  <div className="lg:col-span-1">
+                    <SystemStatusPanel />
+                  </div>
+                </div>
               </div>
             ) : (
               // Classic RAG Interface
@@ -735,54 +697,58 @@ export default function PromptDashboardApp({ onClose }) {
                         Please select at least one source or enable Internet Search.
                       </div>
                     )}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Deliverable Type
+                        </label>
                         <select
-                          value={selectedDeliverableType}
-                          onChange={(e) => setSelectedDeliverableType(e.target.value)}
-                          className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+                          value={deliverableType}
+                          onChange={(e) => setDeliverableType(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         >
-                          <option value="1-pager">1-pager</option>
-                          <option value="chart">Chart</option>
-                          <option value="table">Table</option>
-                          <option value="summary">Summary</option>
+                          {DELIVERABLE_TYPES.map(type => (
+                            <option key={type.id} value={type.id}>
+                              {type.name}
+                            </option>
+                          ))}
                         </select>
-                        <div className="text-sm text-gray-500">
-                          {internetSearch ? 'Internet Search Only' : `${sources.filter(s => s.used).length} sources selected`}
-                        </div>
                       </div>
-                      <Button
-                        onClick={handleGenerate}
-                        disabled={isGenerating || !prompt.trim()}
-                        className="bg-blue-600 hover:bg-blue-700"
-                      >
-                        {isGenerating ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
-                            Generating...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-4 h-4 mr-2" />
-                            Generate Deliverable
-                          </>
-                        )}
-                      </Button>
+                      
+                      <div className="flex items-end">
+                        <Button
+                          onClick={handleGenerate}
+                          disabled={isGenerating || !prompt.trim()}
+                          className="px-6 py-2"
+                        >
+                          {isGenerating ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                              Generating...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="h-4 w-4 mr-2" />
+                              Generate
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Content Area */}
+                {/* Results Area */}
                 <div className="flex-1 overflow-y-auto p-6">
                   {isGenerating ? (
                     <div className="space-y-6">
+                      <ProcessingIndicator />
                       <RagProcessingPipeline
-                        currentStage={processingStage}
-                        stages={processingStages}
-                        retrievedChunks={retrievedChunks}
+                        stage={processingStage}
+                        retrievedContent={retrievedContent}
+                        sourceContributions={sourceContributions}
                         processingTime={processingTime}
-                        confidence={confidence}
-                        sourceBreakdown={sourceBreakdown}
+                        processingStages={processingStages}
                       />
                     </div>
                   ) : ragResponse ? (
@@ -822,35 +788,40 @@ export default function PromptDashboardApp({ onClose }) {
                             const url = URL.createObjectURL(blob);
                             const a = document.createElement('a');
                             a.href = url;
-                            a.download = `deliverable-${new Date().toISOString().split('T')[0]}.txt`;
-                            document.body.appendChild(a);
+                            a.download = `deliverable-${Date.now()}.txt`;
                             a.click();
-                            document.body.removeChild(a);
                             URL.revokeObjectURL(url);
                           }}
                         />
                       ) : (
-                        <SourceAttribution
-                          response={ragResponse.summary?.join('\n\n') || ragResponse.insights?.join('\n\n') || 'Response generated successfully.'}
-                          sources={sourceBreakdown}
-                          confidence={confidence}
-                        />
+                        // Simple View
+                        <div className="space-y-6">
+                          <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                            <h4 className="text-lg font-semibold mb-4">Generated Content</h4>
+                            <div className="prose max-w-none">
+                              {ragResponse.summary?.map((item, idx) => (
+                                <p key={idx} className="mb-4">{item}</p>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          <SourceAttribution sources={sourceBreakdown} />
+                          
+                          <ChunkPreviewCards 
+                            chunks={retrievedChunks} 
+                            onChunkSelect={handleChunkSelect}
+                          />
+                        </div>
                       )}
-                      
-                      {/* Retrieved Chunks */}
-                      <ChunkPreviewCards
-                        chunks={retrievedChunks}
-                        onChunkSelect={handleChunkSelect}
-                      />
                     </div>
                   ) : (
                     <div className="text-center py-12">
-                      <Brain className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                      <Sparkles className="h-12 w-12 mx-auto mb-4 text-gray-300" />
                       <h3 className="text-lg font-medium text-gray-900 mb-2">
                         Ready to Generate
                       </h3>
                       <p className="text-gray-500">
-                        Enter your prompt and select data sources to get started.
+                        Enter a prompt above to start generating deliverables
                       </p>
                     </div>
                   )}
@@ -859,14 +830,6 @@ export default function PromptDashboardApp({ onClose }) {
             )}
           </div>
         </div>
-
-        {/* Add Source Modal */}
-        {showAddSourceModal && (
-          <AddSourceModal
-            onClose={() => setShowAddSourceModal(false)}
-            onAdd={handleAddSource}
-          />
-        )}
       </div>
     </div>
   );
