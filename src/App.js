@@ -1,10 +1,21 @@
 import React from 'react';
-import DesktopShell from './components/DesktopShell';
-import './index.css';
+import PromptDashboardApp from './components/PromptDashboardApp';
+import ErrorBoundary from './components/ErrorBoundary';
+import DebugPanel from './components/DebugPanel';
+import errorMonitor from './utils/errorMonitor';
+import './App.css';
+
+// Initialize error monitoring
+console.log('🔧 Error monitoring initialized');
 
 function App() {
   return (
-    <DesktopShell />
+    <ErrorBoundary>
+      <div className="App">
+        <PromptDashboardApp />
+        <DebugPanel />
+      </div>
+    </ErrorBoundary>
   );
 }
 

@@ -2671,3 +2671,54 @@ app.use('*', (req, res) => {
     error: 'Endpoint not found'
   });
 });
+
+// Error logging endpoint
+app.post('/api/log-error', async (req, res) => {
+  try {
+    const errorData = req.body;
+    
+    // Log error to console with timestamp
+    console.error('🚨 Frontend Error Report:', {
+      timestamp: new Date().toISOString(),
+      type: errorData.type,
+      details: errorData.details,
+      userAgent: errorData.userAgent,
+      url: errorData.url
+    });
+
+    // Store error in memory (in production, you'd want to store in a database)
+    if (!global.errorLog) {
+      global.errorLog = [];
+    }
+    
+    global.errorLog.push({
+      ...errorData,
+      serverTimestamp: new Date().toISOString()
+    });
+
+    // Keep only last 100 errors
+    if (global.errorLog.length > 100) {
+      global.errorLog = global.errorLog.slice(-100);
+    }
+
+    res.json({ success: true, message: 'Error logged successfully' });
+  } catch (error) {
+    console.error('Error logging frontend error:', error);
+    res.status(500).json({ success: false, error: 'Failed to log error' });
+  }
+});
+
+// Get error log endpoint
+app.get('/api/error-log', (req, res) => {
+  try {
+    const errors = global.errorLog || [];
+    res.json({ 
+      success: true, 
+      errors: errors.slice(-20), // Return last 20 errors
+      total: errors.length 
+    });
+  } catch (error) {
+    console.error('Error retrieving error log:', error);
+    res.status(500).json({ success: false, error: 'Failed to retrieve error log' });
+  }
+});
