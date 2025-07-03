@@ -3,6 +3,7 @@ import { Terminal, Command, Sparkles, FileText, BarChart3, Table, Search, Databa
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import SourcePanel from './SourcePanel';
+import AddSourceModal from './AddSourceModal';
 import sourceRegistry from '../data/source_registry.json';
 import { retrieveRelevantContent, processRagQuery, processUploadedFiles, processRagQueryFallback } from '../services/connections';
 import RagProcessingPipeline from './RagProcessingPipeline';
@@ -38,6 +39,7 @@ export default function PromptDashboardApp({ onClose }) {
   const [selectedDeliverableType, setSelectedDeliverableType] = useState(null);
   const commandBarRef = useRef(null);
   const [localFiles, setLocalFiles] = useState([]);
+  const [showAddSourceModal, setShowAddSourceModal] = useState(false);
 
   // RAG Processing States
   const [processingStage, setProcessingStage] = useState(null);
@@ -583,6 +585,53 @@ export default function PromptDashboardApp({ onClose }) {
     );
   };
 
+  const handleAddSource = async (type, metadata = {}) => {
+    try {
+      if (type === 'local' && metadata.files) {
+        // Process uploaded files
+        const processedFiles = await processUploadedFiles(metadata.files);
+        
+        // Refresh the sources list to include the new files
+        const res = await fetch(`${process.env.REACT_APP_API_URL || 'https://ran-backend-pp3x.onrender.com'}/api/uploaded-files`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            // Convert uploaded files to source format for sidebar
+            const uploadedSources = data.files.map((file, index) => ({
+              id: `uploaded_${index}`,
+              type: 'local',
+              title: file.filename,
+              subject: file.filename,
+              from: 'Uploaded File',
+              date: new Date(file.uploadedAt).toLocaleDateString(),
+              used: false,
+              chunks: file.chunks,
+              source: 'local',
+              metadata: {
+                filename: file.filename,
+                source: 'local',
+                chunks: file.chunks,
+                size: file.size,
+                type: file.type
+              }
+            }));
+            
+            // Add uploaded files to sources
+            setSources(prev => {
+              const existingSources = prev.filter(s => s.type !== 'local');
+              return [...existingSources, ...uploadedSources];
+            });
+            
+            setLocalFiles(data.files);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error adding source:', error);
+      alert(`Failed to add source: ${error.message}`);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl h-full max-h-[90vh] flex flex-col">
@@ -639,7 +688,7 @@ export default function PromptDashboardApp({ onClose }) {
               <SourcePanel
                 sources={sources}
                 onSourceToggle={internetSearch ? undefined : handleToggleUsed}
-                onAddSource={() => {}}
+                onAddSource={() => setShowAddSourceModal(true)}
               />
               <div className="p-4">
                 <button
@@ -810,6 +859,14 @@ export default function PromptDashboardApp({ onClose }) {
             )}
           </div>
         </div>
+
+        {/* Add Source Modal */}
+        {showAddSourceModal && (
+          <AddSourceModal
+            onClose={() => setShowAddSourceModal(false)}
+            onAdd={handleAddSource}
+          />
+        )}
       </div>
     </div>
   );
