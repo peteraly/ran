@@ -2012,12 +2012,33 @@ async function generateAnswerWithSources(query, documents, conservativeMode = fa
 // AI-Powered Synthesis for high-quality deliverables with Chain of Thought reasoning
 async function generateAISynthesizedDeliverable(query, retrievedChunks, sources, deliverableType = 'executive_summary') {
   try {
-    console.log(`🤖 Generating AI-synthesized ${deliverableType} deliverable with enhanced style guide...`);
+    console.log(`🤖 Generating AI-synthesized ${deliverableType} deliverable with enhanced multi-source synthesis...`);
     
-    // Prepare context from retrieved chunks
-    const contextText = retrievedChunks.map((chunk, index) => 
-      `[Source ${index + 1}]: ${chunk.content}`
-    ).join('\n\n');
+    // If no chunks provided, generate a fallback response
+    if (!retrievedChunks || retrievedChunks.length === 0) {
+      console.log('⚠️ No chunks provided, generating fallback response');
+      return generateChunkBasedDeliverable(query, [], sources);
+    }
+    
+    // Group chunks by source for better synthesis
+    const chunksBySource = {};
+    retrievedChunks.forEach(chunk => {
+      const sourceName = chunk.metadata?.filename || chunk.metadata?.source || 'Unknown';
+      if (!chunksBySource[sourceName]) {
+        chunksBySource[sourceName] = [];
+      }
+      chunksBySource[sourceName].push(chunk);
+    });
+    
+    console.log(`📚 Synthesizing from ${Object.keys(chunksBySource).length} sources:`, Object.keys(chunksBySource));
+    
+    // Prepare context from retrieved chunks with source attribution
+    const contextText = Object.entries(chunksBySource).map(([sourceName, chunks]) => {
+      const sourceContent = chunks.map((chunk, index) => 
+        `[${sourceName} - Chunk ${index + 1}]: ${chunk.content}`
+      ).join('\n\n');
+      return `=== SOURCE: ${sourceName} ===\n${sourceContent}\n`;
+    }).join('\n\n');
     
     // Check if we have a writing guide in the sources
     const writingGuideContent = await findWritingGuideContent(retrievedChunks, sources);
@@ -2026,111 +2047,96 @@ async function generateAISynthesizedDeliverable(query, retrievedChunks, sources,
     const guidelines = writingStyleGuide.getGuidelines(deliverableType);
     const qualityStandards = writingStyleGuide.getQualityStandards();
     
-    // Enhanced synthesis prompt with writing guide integration
-    const synthesisPrompt = `You are an expert analyst creating a high-quality deliverable based on retrieved document content. Use Chain of Thought reasoning to show your analysis process and include confidence levels for each claim.
+    // Enhanced prompt for multi-source synthesis
+    const synthesisPrompt = `You are an expert analyst creating a high-quality ${deliverableType} deliverable.
+
+TASK: Analyze the following query and synthesize information from multiple sources to create a comprehensive, well-structured response.
 
 QUERY: "${query}"
 
-RETRIEVED CONTENT:
+AVAILABLE SOURCES:
 ${contextText}
 
-${writingGuideContent ? `WRITING GUIDE REFERENCE:
-${writingGuideContent}
-
-IMPORTANT: Use this writing guide as your primary reference for style, structure, and quality standards.` : ''}
-
-DELIVERABLE TYPE: ${deliverableType}
-
-STRUCTURE REQUIREMENTS:
-${guidelines.structure.join('\n')}
-
-TONE & STYLE:
-- Tone: ${guidelines.tone}
-- Length: ${guidelines.length}
-- Formatting: ${guidelines.formatting}
+WRITING GUIDELINES:
+${guidelines}
 
 QUALITY STANDARDS:
-${guidelines.quality_standards.map(standard => `• ${standard}`).join('\n')}
+${qualityStandards}
 
-GENERAL QUALITY REQUIREMENTS:
-${qualityStandards.general.map(standard => `• ${standard}`).join('\n')}
+${writingGuideContent ? `WRITING STYLE GUIDE REFERENCE:\n${writingGuideContent}\n` : ''}
 
-EVIDENCE REQUIREMENTS:
-${qualityStandards.evidence.map(standard => `• ${standard}`).join('\n')}
+INSTRUCTIONS:
+1. SYNTHESIZE ACROSS SOURCES: Combine information from all relevant sources to create a comprehensive response
+2. MAINTAIN SOURCE ATTRIBUTION: Clearly indicate which sources support each claim or insight
+3. ADDRESS CONTRADICTIONS: If sources contradict each other, acknowledge this and explain the differences
+4. PROVIDE CONTEXT: Explain the significance and implications of the findings
+5. STRUCTURE APPROPRIATELY: Format the response according to the ${deliverableType} guidelines
+6. INCLUDE REASONING: Use [REASONING: ...] tags to explain your analytical process
+7. ASSESS CONFIDENCE: Use [HIGH_CONFIDENCE: ...], [MEDIUM_CONFIDENCE: ...], or [LOW_CONFIDENCE: ...] tags based on source quality and agreement
 
-REASONING REQUIREMENTS:
-${qualityStandards.reasoning.map(standard => `• ${standard}`).join('\n')}
+RESPONSE FORMAT:
+- Use clear, professional language
+- Include specific citations to sources
+- Provide actionable insights where applicable
+- Address the query comprehensively using all relevant sources
+- Maintain logical flow and structure
 
-${writingGuideContent ? `CUSTOM WRITING RULES:
-• Follow the writing guide's specific style and format
-• Use similar terminology and language patterns
-• Match the guide's level of detail and complexity
-• Apply document-specific formatting rules` : ''}
+Generate a comprehensive ${deliverableType} that synthesizes information from all relevant sources.`;
 
-ANALYSIS PROCESS:
-1. First, analyze the query to understand what information is needed
-2. Review each source to identify relevant information and assess reliability
-3. ${writingGuideContent ? 'Reference the writing guide for style and structure requirements' : 'Apply standard quality guidelines'}
-4. Synthesize findings into coherent insights with confidence scoring
-5. Structure the response according to the deliverable format
-6. Include reasoning annotations throughout with confidence levels
-
-IMPORTANT: Only use information from the provided content. Do not add external knowledge or assumptions.`;
-
-    // Generate the synthesis using OpenAI with enhanced prompt
+    console.log('🤖 Sending enhanced synthesis prompt to OpenAI...');
+    
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: 'gpt-4o-mini',
       messages: [
         {
-          role: "system",
-          content: "You are an expert business analyst who creates clear, accurate, and actionable deliverables based on provided source material. Follow the specific style guide and quality standards provided. Always use Chain of Thought reasoning and maintain source grounding. Include reasoning annotations to explain your thinking process."
+          role: 'system',
+          content: 'You are an expert analyst specializing in synthesizing information from multiple sources to create high-quality, comprehensive deliverables. Always maintain source attribution and provide clear reasoning for your conclusions.'
         },
         {
-          role: "user",
+          role: 'user',
           content: synthesisPrompt
         }
       ],
-      temperature: 0.3, // Lower temperature for more consistent, grounded output
-      max_tokens: 3000 // Increased for enhanced content
+      temperature: 0.3,
+      max_tokens: 4000
     });
 
-    const synthesizedContent = completion.choices[0].message.content;
+    const content = completion.choices[0].message.content;
+    console.log('✅ AI synthesis completed successfully');
     
-    // Create source mapping for citations
-    const sourceMapping = retrievedChunks.map((chunk, index) => ({
+    // Extract reasoning and thought process
+    const reasoning = extractReasoningAnnotations(content);
+    const thoughtProcess = await extractThoughtProcess(content, query, retrievedChunks);
+    const insights = await extractKeyInsights(content, retrievedChunks);
+    
+    // Calculate confidence based on source diversity and chunk quality
+    const confidence = calculateSynthesisConfidence(retrievedChunks, sources);
+    
+    // Create source mapping for attribution
+    const sourceMapping = Object.entries(chunksBySource).map(([sourceName, chunks], index) => ({
       citation: `[${index + 1}]`,
-      source: chunk.metadata?.filename || 'Unknown',
-      score: chunk.score || 0
+      source: sourceName,
+      chunks: chunks.length,
+      avgScore: chunks.reduce((sum, chunk) => sum + (chunk.score || 0), 0) / chunks.length
     }));
     
-    // Validate quality using style guide
-    const qualityValidation = writingStyleGuide.validateQuality(synthesizedContent, deliverableType);
-    
-    // Extract reasoning annotations and create reasoning summary
-    const reasoningAnalysis = extractReasoningAnnotations(synthesizedContent);
-    
-    // Extract key insights and metrics
-    const insights = await extractKeyInsights(synthesizedContent, retrievedChunks);
-    
-    console.log(`✅ AI synthesis completed for ${deliverableType} with quality validation:`, qualityValidation);
-    
     return {
-      content: synthesizedContent,
-      sourceMapping,
+      content,
       insights,
       deliverableType,
-      confidence: calculateSynthesisConfidence(retrievedChunks, sources),
-      wordCount: synthesizedContent.split(' ').length,
+      confidence,
+      wordCount: content.split(' ').length,
       processingTime: Date.now(),
-      reasoning: reasoningAnalysis,
-      thoughtProcess: await extractThoughtProcess(synthesizedContent, query, retrievedChunks),
-      qualityValidation, // New field for quality assessment
-      styleGuideUsed: writingGuideContent ? 'custom_writing_guide' : deliverableType // Track which style guide was used
+      sourceMapping,
+      reasoning,
+      thoughtProcess,
+      sourcesUsed: Object.keys(chunksBySource).length,
+      chunksAnalyzed: retrievedChunks.length
     };
     
   } catch (error) {
-    console.error('❌ Error in AI synthesis:', error);
-    // Fallback to chunk-based approach
+    console.error('Error in AI synthesis:', error);
+    // Fallback to chunk-based generation
     return generateChunkBasedDeliverable(query, retrievedChunks, sources);
   }
 }
@@ -2289,14 +2295,44 @@ Format as a numbered list with brief explanations.`;
 
 // Calculate confidence for AI synthesis
 function calculateSynthesisConfidence(chunks, sources) {
-  const avgScore = chunks.reduce((sum, chunk) => sum + (chunk.score || 0), 0) / chunks.length;
-  const sourceDiversity = sources.length;
-  const chunkCount = chunks.length;
+  if (!chunks || chunks.length === 0) {
+    return 0.1; // Very low confidence if no chunks
+  }
   
-  // Base confidence on relevance scores and source diversity
-  let confidence = (avgScore * 0.6) + (Math.min(sourceDiversity / 3, 1) * 0.3) + (Math.min(chunkCount / 5, 1) * 0.1);
+  // Calculate base confidence from chunk quality
+  const avgChunkScore = chunks.reduce((sum, chunk) => sum + (chunk.score || 0.5), 0) / chunks.length;
   
-  return Math.round(confidence * 100);
+  // Calculate source diversity bonus
+  const uniqueSources = new Set(chunks.map(chunk => chunk.metadata?.filename || chunk.metadata?.source));
+  const sourceDiversityBonus = Math.min(uniqueSources.size * 0.1, 0.3); // Max 30% bonus for diversity
+  
+  // Calculate chunk quantity bonus
+  const chunkQuantityBonus = Math.min(chunks.length * 0.02, 0.2); // Max 20% bonus for more chunks
+  
+  // Calculate source agreement bonus (if multiple sources agree on key points)
+  let agreementBonus = 0;
+  if (uniqueSources.size > 1) {
+    // Simple heuristic: if we have multiple sources, assume some agreement
+    agreementBonus = 0.1;
+  }
+  
+  // Combine all factors
+  const totalConfidence = Math.min(
+    avgChunkScore + sourceDiversityBonus + chunkQuantityBonus + agreementBonus,
+    0.95 // Cap at 95% confidence
+  );
+  
+  console.log(`📊 Confidence calculation:`, {
+    avgChunkScore: avgChunkScore.toFixed(2),
+    sourceDiversityBonus: sourceDiversityBonus.toFixed(2),
+    chunkQuantityBonus: chunkQuantityBonus.toFixed(2),
+    agreementBonus: agreementBonus.toFixed(2),
+    totalConfidence: totalConfidence.toFixed(2),
+    uniqueSources: uniqueSources.size,
+    totalChunks: chunks.length
+  });
+  
+  return totalConfidence;
 }
 
 // Fallback chunk-based deliverable generation
