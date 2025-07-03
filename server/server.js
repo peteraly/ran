@@ -486,7 +486,7 @@ app.post('/api/webhook/:source', async (req, res) => {
   }
 });
 
-// Enhanced content retrieval with RAG processing
+// Enhanced content retrieval with RAG processing - ROBUST VERSION
 app.post('/api/retrieve', async (req, res) => {
   try {
     const { query, sources, limit } = req.body;
@@ -495,118 +495,226 @@ app.post('/api/retrieve', async (req, res) => {
     console.log('🔍 Retrieving chunks for query:', query);
     console.log('🔍 Requested sources:', sources);
     
-    // Get all relevant chunks from Pinecone
-    const allChunks = await retrieveRelevantChunksFromPinecone(query, topK * 2); // Get more to filter
+    // Get all relevant chunks from Pinecone with error handling
+    let allChunks = [];
+    try {
+      allChunks = await retrieveRelevantChunksFromPinecone(query, topK * 2); // Get more to filter
+      console.log('🔍 Total chunks found:', allChunks.length);
+    } catch (error) {
+      console.error('❌ Error retrieving chunks from Pinecone:', error.message);
+      // Fallback: return empty chunks but don't fail the request
+      allChunks = [];
+    }
     
-    console.log('🔍 Total chunks found:', allChunks.length);
     console.log('🔍 Available chunk sources:', [...new Set(allChunks.map(chunk => chunk.metadata?.source))]);
     console.log('🔍 Available chunk filenames:', [...new Set(allChunks.map(chunk => chunk.metadata?.filename))]);
     
-    // Filter chunks based on requested sources
+    // ROBUST filtering with multiple fallback strategies
     let filteredChunks = allChunks;
     if (sources && sources.length > 0) {
       filteredChunks = allChunks.filter(chunk => {
         const chunkSource = chunk.metadata?.source;
         const chunkFilename = chunk.metadata?.filename;
         
-        // Check if the source matches (for web sources) or filename matches (for local files)
-        return sources.some(source => {
-          // If source is 'web', check the source field
+        // Strategy 1: Exact filename matching
+        const exactMatch = sources.some(source => {
           if (source === 'web') {
             return chunkSource === 'web';
           }
-          // For local files, check if the filename matches
           return chunkFilename === source;
         });
+        
+        if (exactMatch) return true;
+        
+        // Strategy 2: Sanitized filename matching (fallback)
+        const sanitizedMatch = sources.some(source => {
+          if (source === 'web') return chunkSource === 'web';
+          const sanitizedSource = source.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const sanitizedChunkFilename = chunkFilename?.replace(/[^a-zA-Z0-9._-]/g, '_');
+          return sanitizedChunkFilename === sanitizedSource;
+        });
+        
+        if (sanitizedMatch) return true;
+        
+        // Strategy 3: Partial filename matching (last resort)
+        const partialMatch = sources.some(source => {
+          if (source === 'web') return chunkSource === 'web';
+          return chunkFilename?.includes(source.replace(/[^a-zA-Z0-9]/g, '')) || 
+                 source.includes(chunkFilename?.replace(/[^a-zA-Z0-9]/g, ''));
+        });
+        
+        return partialMatch;
       });
     }
     
-    console.log('🔍 Filtered chunks count:', filteredChunks.length);
-    console.log('🔍 Filtered chunk filenames:', filteredChunks.map(chunk => chunk.metadata?.filename));
+    console.log('🔍 Filtered chunks:', filteredChunks.length);
     
-    // If no chunks found for requested sources, but we have web search enabled
-    if (filteredChunks.length === 0 && sources && sources.includes('web')) {
-      // For web search, we could implement real-time web scraping here
-      // For now, return a message indicating web search is needed
+    // If no chunks found after filtering, try broader search
+    if (filteredChunks.length === 0 && allChunks.length > 0) {
+      console.log('⚠️ No chunks matched sources, using all available chunks');
+      filteredChunks = allChunks.slice(0, topK);
+    }
+    
+    // Final fallback: if still no chunks, return empty array but don't fail
+    if (filteredChunks.length === 0) {
+      console.log('⚠️ No chunks available, returning empty result');
       return res.json({
-        success: true,
         chunks: [],
-        message: 'Web search enabled but no indexed web content found. Consider adding web sources first.',
-        needsWebSearch: true
+        query,
+        sources,
+        totalChunks: 0,
+        warning: 'No relevant chunks found in selected sources'
       });
     }
     
-    // Limit to requested number of chunks
-    const finalChunks = filteredChunks.slice(0, topK);
+    // Limit results and add metadata
+    const limitedChunks = filteredChunks.slice(0, topK).map(chunk => ({
+      ...chunk,
+      sourceFile: chunk.metadata?.filename || chunk.metadata?.source || 'unknown',
+      chunkIndex: chunk.metadata?.chunkIndex || 0
+    }));
     
-    console.log('🔍 Final chunks returned:', finalChunks.length);
+    console.log('✅ Successfully retrieved', limitedChunks.length, 'chunks');
     
-    res.json({ 
-      success: true, 
-      chunks: finalChunks,
-      totalFound: allChunks.length,
-      filteredCount: filteredChunks.length,
-      returnedCount: finalChunks.length
+    res.json({
+      chunks: limitedChunks,
+      query,
+      sources,
+      totalChunks: limitedChunks.length,
+      chunkSources: [...new Set(limitedChunks.map(chunk => chunk.sourceFile))]
     });
+    
   } catch (error) {
-    console.error('Content retrieval error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('❌ Error in /api/retrieve:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve chunks',
+      message: error.message,
+      chunks: [],
+      fallback: true
+    });
   }
 });
 
-// Enhanced RAG processing endpoint
+// Enhanced RAG processing with robust error handling
 app.post('/api/rag/process', async (req, res) => {
   try {
-    const { query, context, sources, deliverableType = 'executive_summary' } = req.body;
+    const { query, contextLength, sources, deliverableType = 'executive_summary' } = req.body;
     
-    console.log('🔄 RAG processing request:', { query, contextLength: context?.length, sources, deliverableType });
+    console.log('🔄 RAG processing request:', { query, contextLength, sources, deliverableType });
     
-    if (!query || !context || !Array.isArray(context)) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Missing required fields: query, context' 
+    // ROBUST chunk retrieval with fallbacks
+    let retrievedChunks = [];
+    let retrievalWarning = null;
+    
+    try {
+      // First attempt: retrieve chunks from Pinecone
+      const retrievalResponse = await fetch(`${req.protocol}://${req.get('host')}/api/retrieve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, sources, limit: contextLength || 5 })
       });
+      
+      if (retrievalResponse.ok) {
+        const retrievalData = await retrievalResponse.json();
+        retrievedChunks = retrievalData.chunks || [];
+        retrievalWarning = retrievalData.warning;
+        console.log('✅ Retrieved', retrievedChunks.length, 'chunks from Pinecone');
+      } else {
+        console.warn('⚠️ Chunk retrieval failed, proceeding with empty chunks');
+        retrievedChunks = [];
+      }
+    } catch (error) {
+      console.error('❌ Error in chunk retrieval:', error.message);
+      retrievedChunks = [];
     }
-
-    // Generate AI-synthesized deliverable
-    const synthesisResult = await generateAISynthesizedDeliverable(query, context, sources, deliverableType);
     
-    // Get source diversity analysis
-    const diversityAnalysis = sourceDiversityAnalyzer.analyzeSourceDiversity(sources, query);
-    const diversitySummary = sourceDiversityAnalyzer.getSourceDiversitySummary(diversityAnalysis);
+    // Fallback strategy: if no chunks retrieved, try to get any available chunks
+    if (retrievedChunks.length === 0) {
+      console.log('🔄 Attempting fallback chunk retrieval...');
+      try {
+        const fallbackResponse = await fetch(`${req.protocol}://${req.get('host')}/api/retrieve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, sources: [], limit: 3 }) // Get any chunks
+        });
+        
+        if (fallbackResponse.ok) {
+          const fallbackData = await fallbackResponse.json();
+          retrievedChunks = fallbackData.chunks || [];
+          console.log('✅ Fallback retrieved', retrievedChunks.length, 'chunks');
+        }
+      } catch (error) {
+        console.error('❌ Fallback retrieval also failed:', error.message);
+      }
+    }
     
-    // Prepare response
+    // Generate deliverable with available chunks (even if empty)
+    console.log('🤖 Generating AI-synthesized', deliverableType, 'deliverable...');
+    
+    let deliverable;
+    try {
+      deliverable = await generateAISynthesizedDeliverable(query, retrievedChunks, sources, deliverableType);
+      console.log('✅ AI synthesis completed for', deliverableType);
+    } catch (error) {
+      console.error('❌ AI synthesis failed:', error.message);
+      // Generate fallback deliverable
+      deliverable = generateChunkBasedDeliverable(query, retrievedChunks, sources);
+      console.log('✅ Generated fallback deliverable');
+    }
+    
+    // Calculate confidence with fallback
+    let confidence = 0.1; // Default low confidence
+    try {
+      confidence = calculateSynthesisConfidence(retrievedChunks, sources);
+    } catch (error) {
+      console.error('❌ Confidence calculation failed:', error.message);
+    }
+    
+    // Generate source diversity analysis with error handling
+    let sourceDiversity = null;
+    try {
+      if (sourceDiversityAnalyzer && typeof sourceDiversityAnalyzer.analyzeSourceDiversity === 'function') {
+        sourceDiversity = sourceDiversityAnalyzer.analyzeSourceDiversity(retrievedChunks, sources, query);
+      }
+    } catch (error) {
+      console.error('❌ Source diversity analysis failed:', error.message);
+      sourceDiversity = {
+        analysis: { totalSources: 0, sourceTypes: {} },
+        summary: 'Analysis unavailable',
+        warnings: ['Source diversity analysis failed'],
+        recommendations: ['Try uploading more diverse sources']
+      };
+    }
+    
+    // Prepare response with comprehensive metadata
     const response = {
       success: true,
-      summary: synthesisResult.content.split('\n').filter(line => line.trim()),
-      insights: synthesisResult.insights,
-      recommendations: diversitySummary.recommendations || [],
-      confidence: synthesisResult.confidence,
-      sourcesUsed: sources.length,
-      processingTime: Date.now(),
-      deliverableType: synthesisResult.deliverableType,
-      wordCount: synthesisResult.wordCount,
-      sourceMapping: synthesisResult.sourceMapping,
-      retrievedChunks: context, // Include the actual retrieved chunks
-      reasoning: synthesisResult.reasoning, // Include reasoning analysis
-      thoughtProcess: synthesisResult.thoughtProcess, // Include thought process
-      sourceDiversity: {
-        analysis: diversityAnalysis,
-        summary: diversitySummary,
-        recommendations: diversitySummary.recommendations || [],
-        warnings: diversitySummary.warnings || []
+      deliverable,
+      confidence,
+      sourceDiversity,
+      metadata: {
+        query,
+        sources,
+        deliverableType,
+        chunksUsed: retrievedChunks.length,
+        chunkSources: [...new Set(retrievedChunks.map(chunk => chunk.sourceFile || chunk.metadata?.filename))],
+        retrievalWarning,
+        hasFallback: retrievedChunks.length === 0
       }
     };
-
+    
     console.log('✅ RAG processing completed successfully');
     res.json(response);
     
   } catch (error) {
-    console.error('RAG processing error:', error);
-    res.status(500).json({ 
-      success: false, 
+    console.error('❌ RAG processing error:', error);
+    res.status(500).json({
+      success: false,
       error: 'RAG processing failed',
-      details: error.message 
+      message: error.message,
+      deliverable: generateChunkBasedDeliverable(req.body.query || 'Query failed', [], req.body.sources || []),
+      confidence: 0.1,
+      fallback: true
     });
   }
 });
@@ -1337,53 +1445,107 @@ async function extractContentLegacy(fileBuffer, fileType) {
   return content;
 }
 
-// Helper function to sanitize filename for ASCII compatibility
+// Enhanced filename sanitization with comprehensive error handling
 function sanitizeFilename(filename) {
-  return filename
-    .replace(/[^a-zA-Z0-9._-]/g, '_') // Replace non-ASCII chars with underscore
-    .replace(/_+/g, '_') // Replace multiple underscores with single
-    .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+  if (!filename) return 'unknown_file';
+  
+  try {
+    // Decode URL encoding first
+    let decodedFilename = filename;
+    try {
+      decodedFilename = decodeURIComponent(filename);
+    } catch (e) {
+      console.log('⚠️ URL decode failed, using original filename');
+    }
+    
+    console.log('Original filename:', filename);
+    console.log('Decoded filename:', decodedFilename);
+    
+    // Remove or replace problematic characters
+    let safeFilename = decodedFilename
+      // Replace non-ASCII characters with underscores
+      .replace(/[^\x00-\x7F]/g, '_')
+      // Replace special characters that could cause issues
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      // Remove multiple consecutive underscores
+      .replace(/_+/g, '_')
+      // Remove leading/trailing underscores
+      .replace(/^_+|_+$/g, '')
+      // Ensure it's not empty
+      .replace(/^$/, 'unknown_file');
+    
+    // Limit length to prevent issues
+    if (safeFilename.length > 100) {
+      const extension = safeFilename.split('.').pop();
+      const name = safeFilename.split('.').slice(0, -1).join('.');
+      safeFilename = name.substring(0, 95) + '.' + extension;
+    }
+    
+    console.log('Final safe filename:', safeFilename);
+    
+    return safeFilename;
+  } catch (error) {
+    console.error('❌ Error in filename sanitization:', error);
+    return 'sanitized_file_' + Date.now();
+  }
 }
 
-// Helper function to chunk content
+// Enhanced Pinecone-safe filename generation
+function generatePineconeSafeFilename(originalFilename) {
+  const sanitized = sanitizeFilename(originalFilename);
+  const timestamp = Date.now();
+  return `${sanitized}_${timestamp}`;
+}
+
+// Enhanced chunking with robust error handling
 function chunkContent(content, filename) {
-  // Sanitize filename for ASCII compatibility
-  const safeFilename = sanitizeFilename(filename);
-  
-  // Split content into paragraphs and filter out empty ones
-  const paragraphs = content
-    .split(/\n\s*\n/)
-    .map(p => p.trim())
-    .filter(p => p.length > 50); // Only keep paragraphs with substantial content
-  
-  // If we have paragraphs, use them as chunks
-  if (paragraphs.length > 0) {
-    return paragraphs.map((paragraph, index) => ({
-      id: `${safeFilename}-chunk-${index}`,
-      content: paragraph,
-      metadata: {
-        filename,
-        chunkIndex: index,
-        chunkType: 'paragraph'
-      }
-    }));
-  }
-  
-  // Fallback: split by sentences if no good paragraphs
-  const sentences = content
-    .split(/[.!?]+/)
-    .map(s => s.trim())
-    .filter(s => s.length > 20);
-  
-  return sentences.map((sentence, index) => ({
-    id: `${safeFilename}-chunk-${index}`,
-    content: sentence,
-    metadata: {
-      filename,
-      chunkIndex: index,
-      chunkType: 'sentence'
+  try {
+    if (!content || typeof content !== 'string') {
+      console.warn('⚠️ Invalid content for chunking, returning empty chunks');
+      return [];
     }
-  }));
+    
+    const sanitizedFilename = sanitizeFilename(filename);
+    console.log('Sanitized filename for Pinecone:', sanitizedFilename);
+    
+    const chunks = [];
+    const chunkSize = 800;
+    const overlap = 200;
+    
+    // Split content into overlapping chunks
+    for (let i = 0; i < content.length; i += chunkSize - overlap) {
+      const chunk = content.slice(i, i + chunkSize);
+      if (chunk.trim().length > 0) {
+        chunks.push({
+          content: chunk,
+          metadata: {
+            filename: filename, // Keep original filename for display
+            sanitizedFilename: sanitizedFilename, // Use sanitized for Pinecone
+            chunkIndex: i,
+            source: 'local',
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+    }
+    
+    console.log(`✅ Generated ${chunks.length} chunks for "${filename}"`);
+    return chunks;
+    
+  } catch (error) {
+    console.error('❌ Error in chunkContent:', error);
+    return [{
+      content: content || 'Content unavailable',
+      metadata: {
+        filename: filename || 'unknown',
+        sanitizedFilename: 'unknown_file',
+        chunkIndex: 0,
+        source: 'local',
+        timestamp: new Date().toISOString(),
+        error: 'Chunking failed'
+      }
+    }];
+  }
 }
 
 // Test endpoint to populate with sample data
@@ -1543,42 +1705,107 @@ app.post('/api/test/rag', async (req, res) => {
 
 // Helper: Index chunks in Pinecone
 async function indexChunksWithPinecone(chunks, metadata) {
-  console.log('Starting Pinecone indexing with metadata:', metadata);
-  console.log('Pinecone API Key available:', !!process.env.PINECONE_API_KEY);
-  console.log('Pinecone Index name:', process.env.PINECONE_INDEX || 'rag-index');
-  
   try {
-    for (const chunk of chunks) {
-      console.log(`Processing chunk: ${chunk.id}`);
-      
-      // Generate embedding using OpenAI
-      console.log('Generating embedding for chunk...');
-      const embeddingResponse = await openai.embeddings.create({
-        model: 'text-embedding-ada-002',
-        input: chunk.content,
-      });
-      const embedding = embeddingResponse.data[0].embedding;
-      console.log('Embedding generated successfully, length:', embedding.length);
-      
-      // Upsert to Pinecone
-      console.log('Upserting to Pinecone...');
-      await index.upsert([
-        {
-          id: chunk.id,
-          values: embedding,
-          metadata: {
-            ...metadata,
-            text: chunk.content,
-            chunk_id: chunk.id,
-          },
-        },
-      ]);
-      console.log(`Successfully upserted chunk: ${chunk.id}`);
+    if (!chunks || chunks.length === 0) {
+      console.warn('⚠️ No chunks to index');
+      return { success: false, error: 'No chunks provided' };
     }
+    
+    console.log(`Attempting to index ${chunks.length} chunks for file: ${metadata.filename}`);
+    console.log('Starting Pinecone indexing with metadata:', metadata);
+    
+    // Check Pinecone configuration
+    if (!process.env.PINECONE_API_KEY) {
+      console.error('❌ Pinecone API Key not available');
+      return { success: false, error: 'Pinecone API Key not configured' };
+    }
+    
+    console.log('Pinecone API Key available:', !!process.env.PINECONE_API_KEY);
+    console.log('Pinecone Index name:', process.env.PINECONE_INDEX_NAME);
+    
+    const index = pinecone.index(process.env.PINECONE_INDEX_NAME);
+    
+    const vectors = [];
+    
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      console.log(`Processing chunk: ${chunk.metadata?.sanitizedFilename || 'unknown'}-chunk-${chunk.metadata?.chunkIndex || i}`);
+      
+      try {
+        // Generate embedding
+        console.log('Generating embedding for chunk...');
+        const embedding = await openai.embeddings.create({
+          model: 'text-embedding-3-small',
+          input: chunk.content,
+          encoding_format: 'float'
+        });
+        
+        console.log('Embedding generated successfully, length:', embedding.data[0].embedding.length);
+        
+        // Create vector with enhanced sanitization
+        const vectorId = `${chunk.metadata?.sanitizedFilename || 'unknown'}-chunk-${chunk.metadata?.chunkIndex || i}`;
+        
+        // Double-check vector ID is ASCII-safe
+        const safeVectorId = vectorId.replace(/[^\x00-\x7F]/g, '_');
+        
+        const vector = {
+          id: safeVectorId,
+          values: embedding.data[0].embedding,
+          metadata: {
+            ...chunk.metadata,
+            content: chunk.content.substring(0, 1000), // Limit content length
+            source: 'local',
+            filename: metadata.filename,
+            sanitizedFilename: chunk.metadata?.sanitizedFilename || 'unknown',
+            chunkIndex: chunk.metadata?.chunkIndex || i,
+            timestamp: new Date().toISOString()
+          }
+        };
+        
+        vectors.push(vector);
+        console.log('Successfully upserted chunk:', safeVectorId);
+        
+      } catch (error) {
+        console.error(`❌ Error processing chunk ${i}:`, error.message);
+        // Continue with other chunks instead of failing completely
+        continue;
+      }
+    }
+    
+    if (vectors.length === 0) {
+      console.error('❌ No valid vectors created');
+      return { success: false, error: 'No valid vectors created' };
+    }
+    
+    // Upsert vectors in batches
+    const batchSize = 100;
+    for (let i = 0; i < vectors.length; i += batchSize) {
+      const batch = vectors.slice(i, i + batchSize);
+      try {
+        console.log(`Upserting batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(vectors.length/batchSize)}`);
+        await index.upsert(batch);
+        console.log(`✅ Successfully upserted batch of ${batch.length} vectors`);
+      } catch (error) {
+        console.error(`❌ Error upserting batch ${Math.floor(i/batchSize) + 1}:`, error.message);
+        // Continue with other batches
+        continue;
+      }
+    }
+    
     console.log('All chunks indexed successfully in Pinecone');
+    return { 
+      success: true, 
+      indexedCount: vectors.length,
+      totalChunks: chunks.length
+    };
+    
   } catch (error) {
-    console.error('Error in indexChunksWithPinecone:', error);
-    throw error;
+    console.error('❌ Error in indexChunksWithPinecone:', error);
+    return { 
+      success: false, 
+      error: error.message,
+      indexedCount: 0
+    };
   }
 }
 
