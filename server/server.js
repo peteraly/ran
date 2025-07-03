@@ -492,17 +492,37 @@ app.post('/api/retrieve', async (req, res) => {
     const { query, sources, limit } = req.body;
     const topK = limit || 5;
     
+    console.log('🔍 Retrieving chunks for query:', query);
+    console.log('🔍 Requested sources:', sources);
+    
     // Get all relevant chunks from Pinecone
     const allChunks = await retrieveRelevantChunksFromPinecone(query, topK * 2); // Get more to filter
+    
+    console.log('🔍 Total chunks found:', allChunks.length);
+    console.log('🔍 Available chunk sources:', [...new Set(allChunks.map(chunk => chunk.metadata?.source))]);
+    console.log('🔍 Available chunk filenames:', [...new Set(allChunks.map(chunk => chunk.metadata?.filename))]);
     
     // Filter chunks based on requested sources
     let filteredChunks = allChunks;
     if (sources && sources.length > 0) {
       filteredChunks = allChunks.filter(chunk => {
         const chunkSource = chunk.metadata?.source;
-        return sources.includes(chunkSource);
+        const chunkFilename = chunk.metadata?.filename;
+        
+        // Check if the source matches (for web sources) or filename matches (for local files)
+        return sources.some(source => {
+          // If source is 'web', check the source field
+          if (source === 'web') {
+            return chunkSource === 'web';
+          }
+          // For local files, check if the filename matches
+          return chunkFilename === source;
+        });
       });
     }
+    
+    console.log('🔍 Filtered chunks count:', filteredChunks.length);
+    console.log('🔍 Filtered chunk filenames:', filteredChunks.map(chunk => chunk.metadata?.filename));
     
     // If no chunks found for requested sources, but we have web search enabled
     if (filteredChunks.length === 0 && sources && sources.includes('web')) {
@@ -518,6 +538,8 @@ app.post('/api/retrieve', async (req, res) => {
     
     // Limit to requested number of chunks
     const finalChunks = filteredChunks.slice(0, topK);
+    
+    console.log('🔍 Final chunks returned:', finalChunks.length);
     
     res.json({ 
       success: true, 
