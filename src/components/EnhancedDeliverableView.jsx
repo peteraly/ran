@@ -104,8 +104,28 @@ const EnhancedDeliverableView = ({
       // Match by source name (from frontend)
       const chunkSource = chunk.metadata?.source;
       
-      const matches = chunkFilename === sourceName || chunkSource === sourceName;
-      console.log(`🔍 Chunk ${chunk.id}: filename="${chunkFilename}", source="${chunkSource}", matches=${matches}`);
+      // Create sanitized version of source name for comparison (matching Pinecone's sanitization)
+      const sanitizedSourceName = sourceName
+        .replace(/[^a-zA-Z0-9]/g, '_')
+        .replace(/_+/g, '_')
+        .toLowerCase();
+      
+      const sanitizedChunkFilename = chunkFilename
+        ?.replace(/[^a-zA-Z0-9]/g, '_')
+        .replace(/_+/g, '_')
+        .toLowerCase();
+      
+      // Multiple matching strategies
+      const exactMatch = chunkFilename === sourceName;
+      const sourceMatch = chunkSource === sourceName;
+      const sanitizedMatch = sanitizedChunkFilename === sanitizedSourceName;
+      const containsMatch = chunkFilename?.includes(sourceName) || sourceName.includes(chunkFilename);
+      
+      const matches = exactMatch || sourceMatch || sanitizedMatch || containsMatch;
+      
+      console.log(`🔍 Chunk ${chunk.id}: filename="${chunkFilename}", source="${chunkSource}"`);
+      console.log(`🔍 Sanitized: chunk="${sanitizedChunkFilename}", source="${sanitizedSourceName}"`);
+      console.log(`🔍 Matches: exact=${exactMatch}, source=${sourceMatch}, sanitized=${sanitizedMatch}, contains=${containsMatch}`);
       
       return matches;
     });

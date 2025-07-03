@@ -1994,19 +1994,67 @@ async function generateAISynthesizedDeliverable(query, retrievedChunks, sources,
     
     // Prepare context from retrieved chunks
     const contextText = retrievedChunks.map((chunk, index) => 
-      `[Source ${index + 1} - ${chunk.metadata?.filename || 'Unknown'}] ${chunk.content}`
+      `[Source ${index + 1}]: ${chunk.content}`
     ).join('\n\n');
     
-    // Create source mapping for citations
-    const sourceMapping = retrievedChunks.map((chunk, index) => ({
-      citation: `[${index + 1}]`,
-      source: chunk.metadata?.filename || 'Unknown',
-      score: chunk.score || 0
-    }));
+    // Check if we have a writing guide in the sources
+    const writingGuideContent = await findWritingGuideContent(retrievedChunks, sources);
     
-    // Generate enhanced prompt using writing style guide
-    const enhancedPrompt = writingStyleGuide.generateEnhancedPrompt(query, deliverableType, contextText);
+    // Get style guide guidelines
+    const guidelines = writingStyleGuide.getGuidelines(deliverableType);
+    const qualityStandards = writingStyleGuide.getQualityStandards();
     
+    // Enhanced synthesis prompt with writing guide integration
+    const synthesisPrompt = `You are an expert analyst creating a high-quality deliverable based on retrieved document content. Use Chain of Thought reasoning to show your analysis process and include confidence levels for each claim.
+
+QUERY: "${query}"
+
+RETRIEVED CONTENT:
+${contextText}
+
+${writingGuideContent ? `WRITING GUIDE REFERENCE:
+${writingGuideContent}
+
+IMPORTANT: Use this writing guide as your primary reference for style, structure, and quality standards.` : ''}
+
+DELIVERABLE TYPE: ${deliverableType}
+
+STRUCTURE REQUIREMENTS:
+${guidelines.structure.join('\n')}
+
+TONE & STYLE:
+- Tone: ${guidelines.tone}
+- Length: ${guidelines.length}
+- Formatting: ${guidelines.formatting}
+
+QUALITY STANDARDS:
+${guidelines.quality_standards.map(standard => `• ${standard}`).join('\n')}
+
+GENERAL QUALITY REQUIREMENTS:
+${qualityStandards.general.map(standard => `• ${standard}`).join('\n')}
+
+EVIDENCE REQUIREMENTS:
+${qualityStandards.evidence.map(standard => `• ${standard}`).join('\n')}
+
+REASONING REQUIREMENTS:
+${qualityStandards.reasoning.map(standard => `• ${standard}`).join('\n')}
+
+${writingGuideContent ? `CUSTOM WRITING RULES:
+• Follow the writing guide's specific style and format
+• Use similar terminology and language patterns
+• Match the guide's level of detail and complexity
+• Apply document-specific formatting rules` : ''}
+
+ANALYSIS PROCESS:
+1. First, analyze the query to understand what information is needed
+2. Review each source to identify relevant information and assess reliability
+3. ${writingGuideContent ? 'Reference the writing guide for style and structure requirements' : 'Apply standard quality guidelines'}
+4. Synthesize findings into coherent insights with confidence scoring
+5. Structure the response according to the deliverable format
+6. Include reasoning annotations throughout with confidence levels
+
+IMPORTANT: Only use information from the provided content. Do not add external knowledge or assumptions.`;
+
     // Generate the synthesis using OpenAI with enhanced prompt
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -2017,7 +2065,7 @@ async function generateAISynthesizedDeliverable(query, retrievedChunks, sources,
         },
         {
           role: "user",
-          content: enhancedPrompt
+          content: synthesisPrompt
         }
       ],
       temperature: 0.3, // Lower temperature for more consistent, grounded output
@@ -2025,6 +2073,13 @@ async function generateAISynthesizedDeliverable(query, retrievedChunks, sources,
     });
 
     const synthesizedContent = completion.choices[0].message.content;
+    
+    // Create source mapping for citations
+    const sourceMapping = retrievedChunks.map((chunk, index) => ({
+      citation: `[${index + 1}]`,
+      source: chunk.metadata?.filename || 'Unknown',
+      score: chunk.score || 0
+    }));
     
     // Validate quality using style guide
     const qualityValidation = writingStyleGuide.validateQuality(synthesizedContent, deliverableType);
@@ -2048,13 +2103,43 @@ async function generateAISynthesizedDeliverable(query, retrievedChunks, sources,
       reasoning: reasoningAnalysis,
       thoughtProcess: await extractThoughtProcess(synthesizedContent, query, retrievedChunks),
       qualityValidation, // New field for quality assessment
-      styleGuideUsed: deliverableType // Track which style guide was used
+      styleGuideUsed: writingGuideContent ? 'custom_writing_guide' : deliverableType // Track which style guide was used
     };
     
   } catch (error) {
-    console.error('Error in AI synthesis:', error);
+    console.error('❌ Error in AI synthesis:', error);
     // Fallback to chunk-based approach
     return generateChunkBasedDeliverable(query, retrievedChunks, sources);
+  }
+}
+
+// Find writing guide content in retrieved chunks
+async function findWritingGuideContent(chunks, sources) {
+  try {
+    // Look for chunks that might contain writing guide content
+    const writingGuideKeywords = [
+      'writing guide', 'style guide', 'formatting', 'structure', 
+      'quality standards', 'writing standards', 'documentation guide',
+      'writing style', 'format', 'template', 'guidelines'
+    ];
+    
+    const potentialWritingGuideChunks = chunks.filter(chunk => 
+      writingGuideKeywords.some(keyword => 
+        chunk.content.toLowerCase().includes(keyword.toLowerCase())
+      )
+    );
+    
+    if (potentialWritingGuideChunks.length > 0) {
+      return potentialWritingGuideChunks
+        .map(chunk => chunk.content)
+        .join('\n\n')
+        .substring(0, 4000); // Limit to 4000 chars for prompt
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error finding writing guide content:', error);
+    return null;
   }
 }
 

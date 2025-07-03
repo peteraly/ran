@@ -78,6 +78,10 @@ const PromptDashboardApp = () => {
 
       // Step 2: Process RAG query with retrieved chunks
       const result = await processRagQuery(query, retrieveData.chunks, selectedSources, deliverableType);
+      
+      // Add the retrieved chunks to the result
+      result.retrievedChunks = retrieveData.chunks;
+      
       setResults(result);
       console.log('Deliverable generated:', result);
     } catch (error) {
@@ -123,6 +127,10 @@ const PromptDashboardApp = () => {
 
       // Step 2: Generate multi-format deliverables with retrieved chunks
       const result = await generateMultiFormatDeliverables(query, retrieveData.chunks, selectedSources);
+      
+      // Add the retrieved chunks to the result
+      result.retrievedChunks = retrieveData.chunks;
+      
       setMultiFormatResults(result);
       setShowMultiFormat(true);
       console.log('Multi-format deliverables generated:', result);

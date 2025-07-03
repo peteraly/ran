@@ -299,6 +299,95 @@ IMPORTANT: Only use information from the provided content. Do not add external k
       citationCount
     };
   }
+
+  // Load custom writing guide from uploaded document
+  async loadCustomGuide(documentContent, guideName = 'custom') {
+    try {
+      console.log(`📚 Loading custom writing guide: ${guideName}`);
+      
+      // Extract writing guidelines from document content
+      const extractedGuidelines = await this.extractGuidelinesFromContent(documentContent);
+      
+      // Add to guidelines
+      this.guidelines[guideName] = {
+        structure: extractedGuidelines.structure || this.guidelines.executive_summary.structure,
+        tone: extractedGuidelines.tone || "Professional, clear, actionable",
+        length: extractedGuidelines.length || "200-400 words",
+        formatting: extractedGuidelines.formatting || "Use clear headings and bullet points",
+        quality_standards: extractedGuidelines.quality_standards || this.guidelines.executive_summary.quality_standards,
+        custom_rules: extractedGuidelines.custom_rules || []
+      };
+      
+      // Update quality standards with custom rules
+      if (extractedGuidelines.custom_rules) {
+        this.qualityStandards.custom = extractedGuidelines.custom_rules;
+      }
+      
+      console.log(`✅ Custom writing guide loaded: ${guideName}`);
+      return true;
+    } catch (error) {
+      console.error(`❌ Error loading custom writing guide:`, error);
+      return false;
+    }
+  }
+
+  // Extract writing guidelines from document content
+  async extractGuidelinesFromContent(content) {
+    try {
+      // Use AI to extract writing guidelines from the document
+      const prompt = `Extract writing guidelines and standards from this document. Return a JSON object with:
+      {
+        "structure": ["list of structural requirements"],
+        "tone": "tone description",
+        "length": "length requirements",
+        "formatting": "formatting rules",
+        "quality_standards": ["list of quality standards"],
+        "custom_rules": ["list of specific writing rules"]
+      }
+
+      Document content:
+      ${content.substring(0, 8000)} // First 8000 chars for analysis
+      `;
+
+      // For now, return a basic structure - in production, you'd call OpenAI here
+      return {
+        structure: [
+          "Custom Document Structure:",
+          "1. Follow the document's organizational pattern",
+          "2. Use similar headings and sections",
+          "3. Maintain consistent formatting"
+        ],
+        tone: "Professional, clear, and aligned with document style",
+        length: "Match document's typical section length",
+        formatting: "Use similar formatting patterns as the reference document",
+        quality_standards: [
+          "Follow the document's writing style",
+          "Use similar terminology and language",
+          "Maintain consistent voice and tone",
+          "Apply document-specific formatting rules"
+        ],
+        custom_rules: [
+          "Reference the uploaded writing guide for specific requirements",
+          "Match the document's level of detail and complexity",
+          "Use similar citation and reference styles",
+          "Follow document-specific terminology"
+        ]
+      };
+    } catch (error) {
+      console.error('Error extracting guidelines:', error);
+      return {};
+    }
+  }
+
+  // Get available writing guides
+  getAvailableGuides() {
+    return Object.keys(this.guidelines);
+  }
+
+  // Check if custom guide exists
+  hasCustomGuide(guideName) {
+    return this.guidelines.hasOwnProperty(guideName);
+  }
 }
 
 module.exports = WritingStyleGuide; 
