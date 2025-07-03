@@ -72,8 +72,9 @@ const PromptDashboardApp = () => {
       const retrieveData = await retrieveResponse.json();
       console.log('✅ Retrieved chunks:', retrieveData);
 
-      if (!retrieveData.success) {
-        throw new Error(retrieveData.error || 'Failed to retrieve chunks');
+      // Check if chunks exist in the response
+      if (!retrieveData.chunks || retrieveData.chunks.length === 0) {
+        throw new Error('No relevant chunks found for the query');
       }
 
       // Step 2: Process RAG query with retrieved chunks
@@ -121,8 +122,9 @@ const PromptDashboardApp = () => {
       const retrieveData = await retrieveResponse.json();
       console.log('✅ Retrieved chunks for multi-format:', retrieveData);
 
-      if (!retrieveData.success) {
-        throw new Error(retrieveData.error || 'Failed to retrieve chunks');
+      // Check if chunks exist in the response
+      if (!retrieveData.chunks || retrieveData.chunks.length === 0) {
+        throw new Error('No relevant chunks found for the query');
       }
 
       // Step 2: Generate multi-format deliverables with retrieved chunks
